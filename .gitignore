@@ -1,0 +1,14 @@
+# Build artifacts
+skill/bin/reminders-eventkit
+mcpb/bin/reminders-eventkit
+mcpb/node_modules/
+dist/
+*.mcpb
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
