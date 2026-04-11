@@ -151,6 +151,6 @@ One Swift source → one binary → two distribution paths.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Copyright (c) 2026 byte5 GmbH. Released under the MIT License — see [LICENSE](LICENSE).
 
 This project is not affiliated with or endorsed by Apple Inc. or Anthropic PBC.
