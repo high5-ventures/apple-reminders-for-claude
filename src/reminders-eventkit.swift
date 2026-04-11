@@ -90,6 +90,36 @@ enum Json {
     static func err(code: String, message: String) -> String {
         return encode(["status": "error", "code": code, "message": message])
     }
+
+    /// Error variant with extra structured fields (e.g. `candidates` for
+    /// `LIST_AMBIGUOUS`). Consumers should treat any unknown top-level
+    /// keys as additional diagnostic information.
+    static func errWith(code: String, message: String, extra: [String: Any]) -> String {
+        var dict: [String: Any] = [
+            "status": "error",
+            "code": code,
+            "message": message,
+        ]
+        for (k, v) in extra { dict[k] = v }
+        return encode(dict)
+    }
+}
+
+// MARK: - stdin helper ------------------------------------------------------
+
+/// Read all of stdin as a UTF-8 string. Used to accept JSON payloads via a
+/// pipe so callers can avoid shell-quoting pitfalls with payloads that
+/// contain apostrophes, backticks, `$(...)`, or other characters that are
+/// awkward to escape inside a positional argv entry.
+func readStdinAsString() -> String {
+    var buffer = Data()
+    let input = FileHandle.standardInput
+    while true {
+        let chunk = input.availableData
+        if chunk.isEmpty { break }
+        buffer.append(chunk)
+    }
+    return String(data: buffer, encoding: .utf8) ?? ""
 }
 
 /// Stable ISO-8601 formatter (local time zone, seconds precision, no TZ
@@ -213,11 +243,6 @@ final class Store {
         return store.calendars(for: .reminder)
     }
 
-    /// Find a calendar by exact title.
-    func list(named name: String) -> EKCalendar? {
-        return lists().first(where: { $0.title == name })
-    }
-
     /// Fetch reminders matching a predicate, synchronously.
     func fetch(_ predicate: NSPredicate) -> [EKReminder] {
         let sem = DispatchSemaphore(value: 0)
@@ -237,6 +262,82 @@ final class Store {
     func reminder(id: String) -> EKReminder? {
         let predicate = store.predicateForReminders(in: nil)
         return fetch(predicate).first(where: { $0.calendarItemIdentifier == id })
+    }
+}
+
+// MARK: - List resolution ---------------------------------------------------
+
+/// Result of resolving a reminder list by user-supplied name or id.
+enum ListLookup {
+    case found(EKCalendar)
+    case notFound
+    case ambiguous([EKCalendar])
+}
+
+/// Resolve a list by exact title, or by calendar identifier if the input
+/// starts with `id:`. Multiple calendars with the same title (common when
+/// you have iCloud + local accounts both exposing a "Personal" list) yield
+/// `.ambiguous` so callers can surface the ambiguity to the user instead
+/// of silently picking the first match.
+func resolveList(_ nameOrId: String) -> ListLookup {
+    if nameOrId.hasPrefix("id:") {
+        let id = String(nameOrId.dropFirst(3))
+        if let cal = Store.shared.lists()
+            .first(where: { $0.calendarIdentifier == id })
+        {
+            return .found(cal)
+        }
+        return .notFound
+    }
+    let matches = Store.shared.lists().filter { $0.title == nameOrId }
+    switch matches.count {
+    case 0: return .notFound
+    case 1: return .found(matches[0])
+    default: return .ambiguous(matches)
+    }
+}
+
+/// Outcome of `requireList(_:)`. Either resolved to a single calendar, or
+/// carries a fully-formed JSON error envelope the caller can return verbatim.
+/// A custom enum (instead of `Result<EKCalendar, String>`) avoids forcing
+/// `String` to conform to `Error`, which Swift's stdlib does not provide.
+enum ListResolution {
+    case ok(EKCalendar)
+    case error(String)
+}
+
+/// Command-side list resolver. Returns either a calendar or a fully-formed
+/// error JSON envelope. Every command that takes a list name as input goes
+/// through this helper so the error shape and ambiguity handling are
+/// consistent across the binary.
+func requireList(_ nameOrId: String) -> ListResolution {
+    switch resolveList(nameOrId) {
+    case .found(let cal):
+        return .ok(cal)
+
+    case .notFound:
+        return .error(
+            Json.err(
+                code: "LIST_NOT_FOUND",
+                message: "No reminder list matching '\(nameOrId)'. Use the exact title, or 'id:<calendar_identifier>' from list-lists."
+            )
+        )
+
+    case .ambiguous(let cals):
+        let candidates: [[String: Any]] = cals.map { cal in
+            return [
+                "name": cal.title,
+                "account": cal.source?.title ?? NSNull(),
+                "calendar_identifier": cal.calendarIdentifier,
+            ]
+        }
+        return .error(
+            Json.errWith(
+                code: "LIST_AMBIGUOUS",
+                message: "Multiple reminder lists match '\(nameOrId)'. Use 'id:<calendar_identifier>' from the candidates field to disambiguate.",
+                extra: ["candidates": candidates]
+            )
+        )
     }
 }
 
@@ -268,11 +369,10 @@ enum Command {
     }
 
     static func getListInfo(_ name: String) -> String {
-        guard let cal = Store.shared.list(named: name) else {
-            return Json.err(
-                code: "LIST_NOT_FOUND",
-                message: "No reminder list named '\(name)'."
-            )
+        let cal: EKCalendar
+        switch requireList(name) {
+        case .ok(let c): cal = c
+        case .error(let err): return err
         }
         let store = Store.shared.store
         let openPred = store.predicateForIncompleteReminders(
@@ -292,11 +392,10 @@ enum Command {
     }
 
     static func listReminders(_ listName: String, _ filter: String) -> String {
-        guard let cal = Store.shared.list(named: listName) else {
-            return Json.err(
-                code: "LIST_NOT_FOUND",
-                message: "No reminder list named '\(listName)'."
-            )
+        let cal: EKCalendar
+        switch requireList(listName) {
+        case .ok(let c): cal = c
+        case .error(let err): return err
         }
         let store = Store.shared.store
         let pred: NSPredicate
@@ -434,11 +533,10 @@ enum Command {
                 message: "Missing required field 'title'."
             )
         }
-        guard let cal = Store.shared.list(named: listName) else {
-            return Json.err(
-                code: "LIST_NOT_FOUND",
-                message: "No reminder list named '\(listName)'."
-            )
+        let cal: EKCalendar
+        switch requireList(listName) {
+        case .ok(let c): cal = c
+        case .error(let err): return err
         }
 
         let priority = obj["priority"] as? Int ?? 0
@@ -455,7 +553,13 @@ enum Command {
         if let body = obj["body"] as? String { r.notes = body }
         r.priority = priority
 
-        if let dueStr = obj["dueDate"] as? String, let d = parseDate(dueStr) {
+        if let dueStr = obj["dueDate"] as? String {
+            guard let d = parseDate(dueStr) else {
+                return Json.err(
+                    code: "INVALID_PAYLOAD",
+                    message: "Could not parse dueDate '\(dueStr)'. Use ISO-8601 local time like 2026-04-11T18:00:00, or with offset like 2026-04-11T18:00:00+02:00."
+                )
+            }
             let comps = Calendar.current.dateComponents(
                 [.year, .month, .day, .hour, .minute, .second],
                 from: d
@@ -518,9 +622,13 @@ enum Command {
             if let alarms = r.alarms {
                 for a in alarms { r.removeAlarm(a) }
             }
-        } else if let dueStr = obj["dueDate"] as? String,
-                  let d = parseDate(dueStr)
-        {
+        } else if let dueStr = obj["dueDate"] as? String {
+            guard let d = parseDate(dueStr) else {
+                return Json.err(
+                    code: "INVALID_PAYLOAD",
+                    message: "Could not parse dueDate '\(dueStr)'. Use ISO-8601 local time like 2026-04-11T18:00:00, or with offset like 2026-04-11T18:00:00+02:00."
+                )
+            }
             let comps = Calendar.current.dateComponents(
                 [.year, .month, .day, .hour, .minute, .second],
                 from: d
@@ -619,66 +727,94 @@ if args.count < 2 {
 let cmd = args[1]
 let rest = Array(args.dropFirst(2))
 
-// Request permission once up front for all commands. Cached by TCC after
-// first grant.
+// -------------------------------------------------------------------------
+// Step 1: Validate command name + arity BEFORE touching EventKit, so that
+// bogus invocations (typos, missing args) don't trigger the macOS TCC
+// permission dialog.
+// -------------------------------------------------------------------------
+
+let requiredArity: [String: Int] = [
+    "list-lists":          0,
+    "get-list-info":       1,
+    "list-reminders":      2,
+    "search-reminders":    3,
+    "get-today":           0,
+    "get-overdue":         0,
+    "get-scheduled":       0,
+    "get-flagged":         0,
+    "get-reminder":        1,
+    "create-reminder":     1,
+    "update-reminder":     1,
+    "complete-reminder":   1,
+    "uncomplete-reminder": 1,
+    "delete-reminder":     1,
+]
+
+guard let needed = requiredArity[cmd] else {
+    print(Json.err(code: "UNKNOWN_COMMAND", message: "Unknown command: \(cmd)"))
+    exit(1)
+}
+if rest.count < needed {
+    print(usage())
+    exit(1)
+}
+// search-reminders needs an Int-parseable limit at position 2.
+if cmd == "search-reminders", Int(rest[2]) == nil {
+    print(usage())
+    exit(1)
+}
+
+// -------------------------------------------------------------------------
+// Step 2: Request EventKit access now that we know the invocation is
+// well-formed. TCC caches the grant across runs.
+// -------------------------------------------------------------------------
+
 Store.shared.requestAccessOrExit()
+
+// -------------------------------------------------------------------------
+// Step 3: Dispatch.
+//
+// For `create-reminder` and `update-reminder`, a payload argument of "-"
+// means "read JSON from stdin". This avoids shell-quoting pitfalls when
+// a payload contains apostrophes or shell metacharacters — the canonical
+// safe pattern from SKILL.md.
+// -------------------------------------------------------------------------
 
 let output: String
 switch cmd {
 case "list-lists":
     output = Command.listLists()
-
 case "get-list-info":
-    guard rest.count >= 1 else { print(usage()); exit(1) }
     output = Command.getListInfo(rest[0])
-
 case "list-reminders":
-    guard rest.count >= 2 else { print(usage()); exit(1) }
     output = Command.listReminders(rest[0], rest[1])
-
 case "search-reminders":
-    guard rest.count >= 3, let limit = Int(rest[2]) else {
-        print(usage()); exit(1)
-    }
-    output = Command.searchReminders(rest[0], rest[1], limit)
-
+    output = Command.searchReminders(rest[0], rest[1], Int(rest[2])!)
 case "get-today":
     output = Command.getToday()
-
 case "get-overdue":
     output = Command.getOverdue()
-
 case "get-scheduled":
     output = Command.getScheduled()
-
 case "get-flagged":
     output = Command.getFlagged()
-
 case "get-reminder":
-    guard rest.count >= 1 else { print(usage()); exit(1) }
     output = Command.getReminder(rest[0])
-
 case "create-reminder":
-    guard rest.count >= 1 else { print(usage()); exit(1) }
-    output = Command.createReminder(rest[0])
-
+    let payload = rest[0] == "-" ? readStdinAsString() : rest[0]
+    output = Command.createReminder(payload)
 case "update-reminder":
-    guard rest.count >= 1 else { print(usage()); exit(1) }
-    output = Command.updateReminder(rest[0])
-
+    let payload = rest[0] == "-" ? readStdinAsString() : rest[0]
+    output = Command.updateReminder(payload)
 case "complete-reminder":
-    guard rest.count >= 1 else { print(usage()); exit(1) }
     output = Command.completeReminder(rest[0])
-
 case "uncomplete-reminder":
-    guard rest.count >= 1 else { print(usage()); exit(1) }
     output = Command.uncompleteReminder(rest[0])
-
 case "delete-reminder":
-    guard rest.count >= 1 else { print(usage()); exit(1) }
     output = Command.deleteReminder(rest[0])
-
 default:
+    // Unreachable: `requiredArity` keys are the only allowed commands and
+    // we already exited for unknown ones above. Keep a safe fallback.
     output = Json.err(
         code: "UNKNOWN_COMMAND",
         message: "Unknown command: \(cmd)"
@@ -687,8 +823,13 @@ default:
 
 print(output)
 
-// Exit 0 on ok, 1 on error, based on the leading status field.
-if output.hasPrefix("{\"status\":\"ok\"") {
+// Exit 0 on ok, 1 on error. Parse the envelope's `status` field explicitly
+// rather than prefix-matching the raw string, so JSON key ordering and
+// whitespace are irrelevant.
+if let data = output.data(using: .utf8),
+   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+   (obj["status"] as? String) == "ok"
+{
     exit(0)
 } else {
     exit(1)

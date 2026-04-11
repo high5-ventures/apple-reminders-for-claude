@@ -50,11 +50,13 @@ build_mcpb() {
   local STAGE="$DIST/mcpb-stage"
   rm -rf "$STAGE"
   mkdir -p "$STAGE/server" "$STAGE/bin"
-  cp "$REPO/mcpb/manifest.json"   "$STAGE/"
-  cp "$REPO/mcpb/package.json"    "$STAGE/"
-  cp "$REPO/mcpb/server/index.js" "$STAGE/server/"
-  cp "$BINARY_OUT"                "$STAGE/bin/"
-  (cd "$STAGE" && npm install --silent --omit=dev)
+  cp "$REPO/mcpb/manifest.json"      "$STAGE/"
+  cp "$REPO/mcpb/package.json"       "$STAGE/"
+  cp "$REPO/mcpb/package-lock.json"  "$STAGE/"
+  cp "$REPO/mcpb/server/index.js"    "$STAGE/server/"
+  cp "$BINARY_OUT"                   "$STAGE/bin/"
+  # Reproducible install from the committed lockfile — no resolver drift.
+  (cd "$STAGE" && npm ci --silent --omit=dev)
   command -v mcpb >/dev/null 2>&1 || {
     echo "[build] 'mcpb' CLI not found — install with: npm install -g @anthropic-ai/mcpb" >&2
     exit 1

@@ -39,19 +39,24 @@ Every function is a single shell invocation. Do not deviate.
 
 ## Argument encoding rules
 
-Commands that take structured data use JSON payloads as a single positional argument. Commands that take simple scalars use plain positional arguments.
+Commands that take structured data use JSON payloads. Commands that take simple scalars use plain positional arguments.
 
-**JSON payload arguments** (for `create-reminder`, `update-reminder`): quote the whole JSON string once with shell single quotes. Embed double-quoted JSON keys and string values normally. Example:
+**JSON payload via stdin — required for `create-reminder` and `update-reminder`.** Pass the literal sentinel `-` as the single positional argument and stream the JSON on stdin. This is the **only** correct way to pass user-supplied content: shell-quoting arbitrary strings from a user message is unsafe and will break on quotes, backticks, `$`, newlines, or any bracket the shell tries to glob. The `Bash` tool supports stdin via a here-doc:
 ```bash
-reminders-eventkit create-reminder '{"list":"Groceries","title":"Buy milk","dueDate":"2026-04-11T18:00:00","priority":5}'
+~/.claude/skills/apple-reminders/bin/reminders-eventkit create-reminder - <<'JSON'
+{"list":"Groceries","title":"Buy milk","body":"organic, 1.5l","dueDate":"2026-04-11T18:00:00","priority":5}
+JSON
+```
+Build the JSON with a proper JSON encoder (e.g. `jq -n`, a Python one-liner, or by assembling an object literal) — never by string concatenation of user content. The `<<'JSON'` form (note the single quotes around the tag) disables all shell interpolation inside the heredoc, so the payload is passed through bit-for-bit.
+
+**Scalar arguments** (list names, IDs, filters): quote each with double quotes to handle spaces. Example:
+```bash
+~/.claude/skills/apple-reminders/bin/reminders-eventkit list-reminders "Reise und Freizeit" "open"
 ```
 
-**Scalar arguments** (list names, IDs, filters): quote each with double quotes to handle spaces and special characters safely. Example:
-```bash
-reminders-eventkit list-reminders "Reise und Freizeit" "open"
-```
+**Disambiguating duplicate list names.** Multiple reminder lists can share the same title (common when you have both an iCloud "Personal" list and a local one). Every command that accepts a list name also accepts `id:<calendar_identifier>` — take the stable `calendar_identifier` from a prior `list-lists` call. If a plain title is ambiguous, the binary returns `LIST_AMBIGUOUS` with a `candidates` array listing each matching list's name, account, and `calendar_identifier`; surface the ambiguity to the user, pick the intended one, and retry with `id:...`.
 
-**Date format**: ISO-8601 local time, seconds precision, no timezone suffix: `2026-04-11T18:00:00`. The binary also accepts full ISO-8601 with timezone offset if you need to be explicit. Never pass natural-language date strings — parse those yourself first.
+**Date format**: ISO-8601 local time, seconds precision, no timezone suffix: `2026-04-11T18:00:00`. The binary also accepts full ISO-8601 with a timezone offset (e.g. `2026-04-11T18:00:00+02:00`). Never pass natural-language date strings — parse those yourself first. If `dueDate` is present but unparseable, the binary returns `INVALID_PAYLOAD` rather than silently dropping the field.
 
 ## Command catalog
 
@@ -66,8 +71,8 @@ reminders-eventkit list-reminders "Reise und Freizeit" "open"
 | `get-scheduled` | — | `{"reminders":[<reminder>...]}` |
 | `get-flagged` | — | `{"reminders":[], "warning":"..."}` — see note below |
 | `get-reminder` | `<id>` | `{"reminder": <reminder>}` |
-| `create-reminder` | `<json-payload>` | `{"reminder": <reminder>}` |
-| `update-reminder` | `<json-payload>` | `{"reminder": <reminder>}` |
+| `create-reminder` | `-` (JSON on stdin) | `{"reminder": <reminder>}` |
+| `update-reminder` | `-` (JSON on stdin) | `{"reminder": <reminder>}` |
 | `complete-reminder` | `<id>` | `{"reminder": <reminder>}` |
 | `uncomplete-reminder` | `<id>` | `{"reminder": <reminder>}` |
 | `delete-reminder` | `<id>` | `{"deleted_id": "..."}` |
@@ -165,10 +170,12 @@ The source is a single ~500-line Swift file under `src/reminders-eventkit.swift`
 ## Error codes
 
 - `LIST_NOT_FOUND` — the named list doesn't exist. Run `list-lists` to show the user what's available.
+- `LIST_AMBIGUOUS` — the list name matches more than one calendar (e.g. iCloud "Personal" and a local "Personal"). The response carries a `candidates` array with each match's `calendar_identifier`; surface the options to the user and retry with `id:<calendar_identifier>`.
 - `REMINDER_NOT_FOUND` — the ID is unknown. Usually means a stale ID from a previous session; re-query.
 - `INVALID_PRIORITY` — priority was not one of `0|1|5|9`.
 - `INVALID_FILTER` — filter was not one of `open|completed|all`.
-- `INVALID_PAYLOAD` — the JSON payload couldn't be parsed or was missing a required field. The message says which.
+- `INVALID_PAYLOAD` — the JSON payload couldn't be parsed, was missing a required field, or contained an unparseable `dueDate`. The message says which.
+- `UNKNOWN_COMMAND` — the first positional argument wasn't one of the commands listed in the catalog above. Usually a typo.
 - `PERMISSION_DENIED` — macOS refused Reminders access. Tell the user to approve it in *System Settings → Privacy & Security → Reminders*.
 - `SAVE_FAILED` / `DELETE_FAILED` — EventKit refused the write. Rare; usually transient. Retry once, then show the user the raw message.
 
@@ -177,7 +184,9 @@ The source is a single ~500-line Swift file under `src/reminders-eventkit.swift`
 User: *"Add 'Buy milk' to my Groceries list for tomorrow at 6 PM, note: 'organic, 1.5l'."*
 
 ```bash
-~/.claude/skills/apple-reminders/bin/reminders-eventkit create-reminder '{"list":"Groceries","title":"Buy milk","body":"organic, 1.5l","dueDate":"2026-04-12T18:00:00","priority":0}'
+~/.claude/skills/apple-reminders/bin/reminders-eventkit create-reminder - <<'JSON'
+{"list":"Groceries","title":"Buy milk","body":"organic, 1.5l","dueDate":"2026-04-12T18:00:00","priority":0}
+JSON
 ```
 
 Response:
@@ -186,3 +195,11 @@ Response:
 ```
 
 Confirm to the user in their language, e.g. *"Done — 'Buy milk' ist auf deiner Groceries-Liste, fällig morgen 18 Uhr."*
+
+### Handling ambiguous list names
+
+If `create-reminder` returns:
+```json
+{"status":"error","code":"LIST_AMBIGUOUS","message":"Multiple reminder lists match 'Personal'. ...","candidates":[{"name":"Personal","account":"iCloud","calendar_identifier":"A1B2..."},{"name":"Personal","account":"On My Mac","calendar_identifier":"C3D4..."}]}
+```
+show the user the two candidates, ask which one they meant, and retry with `"list":"id:A1B2..."` in the payload.

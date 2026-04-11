@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "apple-reminders",
   "display_name": "Read and Write Apple Reminders",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read, write, and manage reminders in Apple Reminders via EventKit",
   "long_description": "This extension allows Claude to interact with your macOS Reminders app: list reminder lists, create/update/complete/delete reminders, and run smart queries (today, overdue, scheduled, full-text search). It uses Apple's native EventKit framework directly via a bundled Swift binary, making it 10-200× faster than AppleScript-based alternatives. It requires your explicit permission through the macOS Reminders privacy prompt before accessing your data. It is not affiliated with or endorsed by Apple Inc.",
   "author": {

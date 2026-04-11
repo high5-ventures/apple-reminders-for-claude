@@ -37,25 +37,54 @@ if (!BINARY) {
  *
  * Throws only if the binary itself crashes, is missing, or emits non-JSON.
  */
-async function runBinary(args) {
+// Hard ceiling on a single binary invocation. The Swift binary is designed
+// to return in well under a second on databases with hundreds of reminders,
+// so anything approaching this value almost certainly means the macOS TCC
+// permission prompt is waiting for the user (first run only) or EventKit is
+// wedged. 30 s keeps us well inside the MCP client's own request timeout
+// while giving first-run users time to click "Allow".
+const BINARY_TIMEOUT_MS = 30_000;
+
+async function runBinary(args, { stdin } = {}) {
   let stdout = "";
   let stderr = "";
   let exitCode = 0;
+  let killed = false;
+  let signal = null;
   try {
-    const result = await execFileAsync(BINARY, args, {
+    const child = execFileAsync(BINARY, args, {
       maxBuffer: 16 * 1024 * 1024, // 16 MB — plenty for large reminder lists
+      timeout: BINARY_TIMEOUT_MS,
+      killSignal: "SIGTERM",
     });
+    if (typeof stdin === "string") {
+      child.child.stdin.end(stdin);
+    }
+    const result = await child;
     stdout = result.stdout;
     stderr = result.stderr;
   } catch (err) {
-    // execFile throws on non-zero exit. The binary uses exit 1 for logical
-    // errors and still emits a JSON envelope on stdout — salvage it.
+    // execFile throws on non-zero exit, on timeout, and on signal. The binary
+    // uses exit 1 for logical errors and still emits a JSON envelope on
+    // stdout — salvage it when possible.
     stdout = err.stdout || "";
     stderr = err.stderr || "";
     exitCode = typeof err.code === "number" ? err.code : 1;
+    killed = err.killed === true;
+    signal = err.signal || null;
+
+    // Timeout: Node kills the child with SIGTERM and sets `killed: true`.
+    if (killed && signal === "SIGTERM") {
+      throw new Error(
+        `Reminders binary timed out after ${BINARY_TIMEOUT_MS} ms. ` +
+          `If this is the first invocation, macOS may be waiting for you to ` +
+          `grant Reminders access in the privacy prompt — click "Allow" and ` +
+          `retry. Otherwise, EventKit may be wedged; try again in a moment.`
+      );
+    }
     if (!stdout) {
       throw new Error(
-        `Binary crashed (exit ${exitCode}): ${stderr || err.message}`
+        `Binary crashed (exit ${exitCode}${signal ? `, signal ${signal}` : ""}): ${stderr || err.message}`
       );
     }
   }
@@ -153,7 +182,8 @@ const TOOLS = [
           description: "Which reminders to include (default: open)",
         },
         limit: {
-          type: "number",
+          type: "integer",
+          minimum: 0,
           default: 0,
           description: "Max results; 0 = unlimited (default: 0)",
         },
@@ -215,7 +245,7 @@ const TOOLS = [
             "Optional ISO-8601 local-time due date, e.g. 2026-04-11T18:00:00",
         },
         priority: {
-          type: "number",
+          type: "integer",
           enum: [0, 1, 5, 9],
           default: 0,
           description: "0=none, 1=high, 5=medium, 9=low",
@@ -242,7 +272,7 @@ const TOOLS = [
           type: "boolean",
           description: "If true, explicitly remove the existing due date",
         },
-        priority: { type: "number", enum: [0, 1, 5, 9] },
+        priority: { type: "integer", enum: [0, 1, 5, 9] },
       },
       required: ["id"],
     },
@@ -287,7 +317,7 @@ const TOOLS = [
 // ---------------------------------------------------------------------------
 
 const server = new Server(
-  { name: "apple-reminders", version: "0.1.0" },
+  { name: "apple-reminders", version: "0.1.1" },
   { capabilities: { tools: {} } }
 );
 
@@ -354,8 +384,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (typeof args.body === "string") payload.body = args.body;
         if (typeof args.dueDate === "string") payload.dueDate = args.dueDate;
         if (typeof args.priority === "number") payload.priority = args.priority;
+        // Pass the JSON payload over stdin so user content never appears on
+        // the command line. The Swift binary reads stdin when it sees `-`.
         return envelopeToMcpResult(
-          await runBinary(["create-reminder", JSON.stringify(payload)])
+          await runBinary(["create-reminder", "-"], {
+            stdin: JSON.stringify(payload),
+          })
         );
       }
 
@@ -368,7 +402,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.clearDueDate === true) payload.clearDueDate = true;
         if (typeof args.priority === "number") payload.priority = args.priority;
         return envelopeToMcpResult(
-          await runBinary(["update-reminder", JSON.stringify(payload)])
+          await runBinary(["update-reminder", "-"], {
+            stdin: JSON.stringify(payload),
+          })
         );
       }
 
