@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Copyright (c) 2026 byte5 GmbH
+// SPDX-License-Identifier: MIT
+//
 // apple-reminders MCP server — thin stdio wrapper around the bundled
 // Swift/EventKit binary (bin/reminders-eventkit). One tool call = one
 // spawn of the binary with positional or JSON-payload arguments. All

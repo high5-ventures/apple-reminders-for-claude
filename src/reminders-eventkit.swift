@@ -1,3 +1,6 @@
+// Copyright (c) 2026 byte5 GmbH
+// SPDX-License-Identifier: MIT
+//
 // reminders-eventkit.swift
 //
 // A small, self-contained CLI wrapper around Apple's EventKit framework that

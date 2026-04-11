@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 byte5 GmbH
+# SPDX-License-Identifier: MIT
+#
 # Build both distribution artifacts from the single Swift source.
 #
 # Outputs:
