@@ -2,18 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!--
-        reminders-eventkit is a command-line Swift tool, not a sandboxed app.
-        macOS gates Reminders access via TCC (the standard "allow access?"
-        dialog), not via sandbox entitlements, so there is no
-        com.apple.security.personal-information.reminders key here.
-
-        The Hardened Runtime is enabled (via codesign --options runtime) so
-        that Apple's notary service accepts the binary. We opt OUT of the
-        relaxations Hardened Runtime allows: no unsigned executable memory,
-        no dyld variable reads, no library loading from untrusted locations.
-        The Swift stdlib only needs the defaults.
-    -->
     <key>com.apple.security.cs.allow-jit</key>
     <false/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
