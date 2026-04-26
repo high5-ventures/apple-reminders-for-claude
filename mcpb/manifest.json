@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "apple-reminders",
   "display_name": "Apple Reminders",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Read, write, and manage macOS Reminders via Apple's native EventKit framework — 10–200× faster than AppleScript alternatives.",
   "long_description": "Apple Reminders for Claude provides full CRUD access to your macOS Reminders through Claude Desktop. It wraps Apple's native EventKit framework in a signed, notarized Swift binary, returning stable UUIDs and structured JSON. Thirteen tools cover the full reminder lifecycle: list reminder lists, list reminders (open/completed/all), full-text search, today/overdue/scheduled smart queries, and create/update/complete/uncomplete/delete by ID. All data stays on-device — no network calls. Requires macOS 11+ and grants Reminders access via macOS's standard TCC privacy prompt on first use. Works identically in any language; the tool descriptions match on intent, not keywords. This extension is not affiliated with or endorsed by Apple Inc.",
   "author": {

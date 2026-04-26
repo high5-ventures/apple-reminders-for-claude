@@ -24,7 +24,6 @@
 //   get-today
 //   get-overdue
 //   get-scheduled
-//   get-flagged
 //   get-reminder      <id>
 //   create-reminder   <json-payload>
 //   update-reminder   <json-payload>
@@ -188,12 +187,10 @@ func reminderDict(_ r: EKReminder) -> [String: Any] {
 
 // NOTE on `flagged`:
 // EKReminder does not expose the "flagged" property that AppleScript does,
-// because "flagged" is implemented on top of tasks, not calendar items, in
-// newer macOS versions. We report `false` for all reminders and document the
-// limitation. If the user needs flagged queries, the AppleScript path
-// remains available. (A future improvement could look for a "#flagged" tag
-// or the private `_flagged` KVC path, but neither is stable across macOS
-// releases.)
+// so we report `false` for all reminders. The Claude Code skill ships an
+// AppleScript fallback (skills/apple-reminders/scripts/get_flagged.applescript)
+// for users who need flagged queries; this binary intentionally does not
+// expose a `get-flagged` command since it would always return an empty list.
 
 // MARK: - Store access ------------------------------------------------------
 
@@ -361,6 +358,7 @@ enum Command {
             out.append([
                 "name": cal.title,
                 "account": cal.source?.title ?? NSNull(),
+                "calendar_identifier": cal.calendarIdentifier,
                 "open_count": openCount,
                 "completed_count": doneCount,
             ])
@@ -386,6 +384,7 @@ enum Command {
         return Json.ok([
             "name": cal.title,
             "account": cal.source?.title ?? NSNull(),
+            "calendar_identifier": cal.calendarIdentifier,
             "open_count": openCount,
             "completed_count": doneCount,
         ])
@@ -490,15 +489,6 @@ enum Command {
             .filter { $0.dueDateComponents != nil }
             .map(reminderDict)
         return Json.ok(["reminders": items])
-    }
-
-    static func getFlagged() -> String {
-        // See note above on EKReminder.flagged. Returns an empty array with
-        // a warning field so Claude can report this clearly to the user.
-        return Json.ok([
-            "reminders": [] as [Any],
-            "warning": "EventKit does not expose the 'flagged' attribute on reminders. Use the AppleScript fallback for flagged queries.",
-        ])
     }
 
     static func getReminder(_ id: String) -> String {
@@ -741,7 +731,6 @@ let requiredArity: [String: Int] = [
     "get-today":           0,
     "get-overdue":         0,
     "get-scheduled":       0,
-    "get-flagged":         0,
     "get-reminder":        1,
     "create-reminder":     1,
     "update-reminder":     1,
@@ -758,10 +747,48 @@ if rest.count < needed {
     print(usage())
     exit(1)
 }
-// search-reminders needs an Int-parseable limit at position 2.
-if cmd == "search-reminders", Int(rest[2]) == nil {
-    print(usage())
-    exit(1)
+
+// -------------------------------------------------------------------------
+// Step 1.5: Semantic validation of arguments (filter values, limit ≥ 0,
+// JSON payload shape) BEFORE the macOS TCC prompt, so malformed calls
+// don't leave a ghost permission dialog. Stdin is read here so it's
+// consumed exactly once.
+// -------------------------------------------------------------------------
+
+let validFilters: Set<String> = ["open", "completed", "all"]
+var stdinPayload: String? = nil
+
+switch cmd {
+case "list-reminders":
+    if !validFilters.contains(rest[1]) {
+        print(Json.err(code: "INVALID_FILTER", message: "Filter must be one of open|completed|all."))
+        exit(1)
+    }
+case "search-reminders":
+    if !validFilters.contains(rest[1]) {
+        print(Json.err(code: "INVALID_FILTER", message: "Filter must be one of open|completed|all."))
+        exit(1)
+    }
+    guard let limit = Int(rest[2]) else {
+        print(Json.err(code: "INVALID_PAYLOAD", message: "limit must be an integer."))
+        exit(1)
+    }
+    if limit < 0 {
+        print(Json.err(code: "INVALID_PAYLOAD", message: "limit must be ≥ 0."))
+        exit(1)
+    }
+case "create-reminder", "update-reminder":
+    let payload = rest[0] == "-" ? readStdinAsString() : rest[0]
+    guard let data = payload.data(using: .utf8),
+          let raw = try? JSONSerialization.jsonObject(with: data),
+          raw is [String: Any]
+    else {
+        print(Json.err(code: "INVALID_PAYLOAD", message: "Payload must be a JSON object."))
+        exit(1)
+    }
+    stdinPayload = payload
+default:
+    break
 }
 
 // -------------------------------------------------------------------------
@@ -772,12 +799,7 @@ if cmd == "search-reminders", Int(rest[2]) == nil {
 Store.shared.requestAccessOrExit()
 
 // -------------------------------------------------------------------------
-// Step 3: Dispatch.
-//
-// For `create-reminder` and `update-reminder`, a payload argument of "-"
-// means "read JSON from stdin". This avoids shell-quoting pitfalls when
-// a payload contains apostrophes or shell metacharacters — the canonical
-// safe pattern from SKILL.md.
+// Step 3: Dispatch. create/update use the payload pre-fetched in Step 1.5.
 // -------------------------------------------------------------------------
 
 let output: String
@@ -796,16 +818,12 @@ case "get-overdue":
     output = Command.getOverdue()
 case "get-scheduled":
     output = Command.getScheduled()
-case "get-flagged":
-    output = Command.getFlagged()
 case "get-reminder":
     output = Command.getReminder(rest[0])
 case "create-reminder":
-    let payload = rest[0] == "-" ? readStdinAsString() : rest[0]
-    output = Command.createReminder(payload)
+    output = Command.createReminder(stdinPayload!)
 case "update-reminder":
-    let payload = rest[0] == "-" ? readStdinAsString() : rest[0]
-    output = Command.updateReminder(payload)
+    output = Command.updateReminder(stdinPayload!)
 case "complete-reminder":
     output = Command.completeReminder(rest[0])
 case "uncomplete-reminder":
@@ -813,12 +831,7 @@ case "uncomplete-reminder":
 case "delete-reminder":
     output = Command.deleteReminder(rest[0])
 default:
-    // Unreachable: `requiredArity` keys are the only allowed commands and
-    // we already exited for unknown ones above. Keep a safe fallback.
-    output = Json.err(
-        code: "UNKNOWN_COMMAND",
-        message: "Unknown command: \(cmd)"
-    )
+    output = Json.err(code: "UNKNOWN_COMMAND", message: "Unknown command: \(cmd)")
 }
 
 print(output)

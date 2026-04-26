@@ -6,12 +6,12 @@
     "url": "https://github.com/high5-ventures/apple-reminders-for-claude",
     "source": "github"
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@high5ventures/apple-reminders-mcp",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "transport": {
         "type": "stdio"
       }

@@ -28,11 +28,17 @@ SKILL_BIN_LINK="${SKILL_BIN_DIR}/reminders-eventkit"
 
 mkdir -p "$BIN_DIR" "$SKILL_BIN_DIR"
 
-# Reuse existing download if version matches
+# Reuse existing download if version matches AND signature still verifies
+# — re-verification guards against tampering since the original install.
 if [[ -x "$BIN_PATH" && -f "$VERSION_MARKER" ]]; then
     if [[ "$(cat "$VERSION_MARKER")" == "$VERSION" ]]; then
-        ln -sf "$BIN_PATH" "$SKILL_BIN_LINK"
-        exit 0
+        if codesign --verify --verbose "$BIN_PATH" 2>/dev/null \
+           && codesign -dv "$BIN_PATH" 2>&1 \
+              | grep -q 'Authority=Developer ID Application: high5 ventures GmbH'; then
+            ln -sf "$BIN_PATH" "$SKILL_BIN_LINK"
+            exit 0
+        fi
+        echo "install-binary: cached binary failed re-verification — redownloading" >&2
     fi
 fi
 

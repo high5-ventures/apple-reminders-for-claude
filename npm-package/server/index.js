@@ -16,8 +16,17 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
 
 const execFileAsync = promisify(execFile);
+
+const here = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(
+  readFileSync(resolve(here, "..", "package.json"), "utf8")
+);
+const VERSION = pkg.version;
 
 const BINARY = process.env.REMINDERS_BINARY;
 if (!BINARY) {
@@ -75,32 +84,40 @@ async function runBinary(args, { stdin } = {}) {
 
     // Timeout: Node kills the child with SIGTERM and sets `killed: true`.
     if (killed && signal === "SIGTERM") {
-      throw new Error(
+      const e = new Error(
         `Reminders binary timed out after ${BINARY_TIMEOUT_MS} ms. ` +
           `If this is the first invocation, macOS may be waiting for you to ` +
           `grant Reminders access in the privacy prompt — click "Allow" and ` +
           `retry. Otherwise, EventKit may be wedged; try again in a moment.`
       );
+      e.envelopeCode = "WRAPPER_TIMEOUT";
+      throw e;
     }
     if (!stdout) {
-      throw new Error(
+      const e = new Error(
         `Binary crashed (exit ${exitCode}${signal ? `, signal ${signal}` : ""}): ${stderr || err.message}`
       );
+      e.envelopeCode = "WRAPPER_BINARY_CRASH";
+      throw e;
     }
   }
 
   const line = stdout.trim();
   if (!line) {
-    throw new Error(
+    const e = new Error(
       `Binary produced no output (exit ${exitCode}, stderr: ${stderr})`
     );
+    e.envelopeCode = "WRAPPER_EMPTY_OUTPUT";
+    throw e;
   }
   try {
     return JSON.parse(line);
   } catch (_parseErr) {
-    throw new Error(
+    const e = new Error(
       `Binary produced non-JSON output: ${line.slice(0, 500)}`
     );
+    e.envelopeCode = "WRAPPER_NON_JSON_OUTPUT";
+    throw e;
   }
 }
 
@@ -353,7 +370,7 @@ const TOOLS = [
 // ---------------------------------------------------------------------------
 
 const server = new Server(
-  { name: "apple-reminders", version: "1.0.0" },
+  { name: "apple-reminders", version: VERSION },
   { capabilities: { tools: {} } }
 );
 
@@ -389,9 +406,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "search_reminders": {
         requireString(args, "query");
         const filter = args.filter || "open";
-        const limit = String(args.limit ?? 0);
+        const lim = args.limit ?? 0;
+        if (
+          typeof lim !== "number" ||
+          !Number.isInteger(lim) ||
+          lim < 0
+        ) {
+          const e = new Error("limit must be a non-negative integer");
+          e.envelopeCode = "INVALID_PAYLOAD";
+          throw e;
+        }
         return envelopeToMcpResult(
-          await runBinary(["search-reminders", args.query, filter, limit])
+          await runBinary(["search-reminders", args.query, filter, String(lim)])
         );
       }
 
@@ -469,21 +495,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
     }
   } catch (err) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Tool error: ${err instanceof Error ? err.message : String(err)}`,
-        },
-      ],
-      isError: true,
+    // Surface wrapper-level failures in the same {status,code,message}
+    // envelope shape that Swift errors use, so MCP clients see one
+    // consistent error contract regardless of where the failure originated.
+    const envelope = {
+      status: "error",
+      code: err && err.envelopeCode ? err.envelopeCode : "WRAPPER_ERROR",
+      message: err instanceof Error ? err.message : String(err),
     };
+    return envelopeToMcpResult(envelope);
   }
 });
 
 function requireString(args, key) {
   if (typeof args[key] !== "string" || args[key].length === 0) {
-    throw new Error(`Missing required argument: ${key}`);
+    const e = new Error(`Missing required argument: ${key}`);
+    e.envelopeCode = "INVALID_PAYLOAD";
+    throw e;
   }
 }
 

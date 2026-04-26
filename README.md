@@ -103,10 +103,10 @@ The skill loads automatically in Claude Code when you mention reminders. In Clau
 >
 > **Claude** (invokes `get_today`):
 > ```json
-> { "status": "ok", "data": [
+> { "status": "ok", "data": { "reminders": [
 >   { "id": "A1B2…", "name": "Zahnarzt-Termin bestätigen", "list": "Persönlich", "due_date": "2026-04-14T10:00:00" },
 >   { "id": "C3D4…", "name": "Rechnung #2026-0412 prüfen", "list": "Arbeit", "due_date": "2026-04-14T14:00:00" }
-> ] }
+> ] } }
 > ```
 > **Claude:** Du hast heute zwei offene Erinnerungen: den Zahnarzt-Termin um 10:00 (Persönlich) und die Rechnungs-Prüfung um 14:00 (Arbeit).
 
@@ -120,7 +120,7 @@ The skill loads automatically in Claude Code when you mention reminders. In Clau
 > ```
 > **Response:**
 > ```json
-> { "status": "ok", "data": { "id": "E5F6…", "name": "Buy oat milk", "due_date": "2026-04-15T18:00:00" } }
+> { "status": "ok", "data": { "reminder": { "id": "E5F6…", "name": "Buy oat milk", "due_date": "2026-04-15T18:00:00" } } }
 > ```
 > **Claude:** Done — added "Buy oat milk" to Groceries for tomorrow at 18:00.
 
@@ -130,14 +130,14 @@ The skill loads automatically in Claude Code when you mention reminders. In Clau
 >
 > **Claude** (invokes `get_overdue`):
 > ```json
-> { "status": "ok", "data": [
+> { "status": "ok", "data": { "reminders": [
 >   { "id": "G7H8…", "name": "Reply to Alex in Slack DM", "list": "Arbeit", "due_date": "2026-04-12T17:00:00" },
 >   { "id": "I9J0…", "name": "Review PR #482", "list": "Arbeit", "due_date": "2026-04-13T12:00:00" }
-> ] }
+> ] } }
 > ```
 > **Claude** (invokes `complete_reminder` with `id: "G7H8…"`):
 > ```json
-> { "status": "ok", "data": { "id": "G7H8…", "completed": true, "completion_date": "2026-04-14T18:22:01" } }
+> { "status": "ok", "data": { "reminder": { "id": "G7H8…", "completed": true, "completion_date": "2026-04-14T18:22:01" } } }
 > ```
 > **Claude:** Two overdue items: Slack reply (now marked done) and PR #482 review (still open).
 
@@ -165,7 +165,7 @@ All 13 tools return a stable JSON envelope — `{ "status": "ok", "data": ... }`
 
 ## Privacy policy
 
-This extension is **100% local**. No data leaves your Mac via this extension. high5 ventures GmbH operates no server and collects no telemetry.
+This extension is **100% local at runtime** — no data leaves your Mac via this extension. high5 ventures GmbH operates no server and collects no telemetry. The only network activity is the one-time download of the signed Swift binary from GitHub Releases during install (verified by Apple Developer ID signature, refuses to install on mismatch).
 
 Read the full policy: [PRIVACY.md](PRIVACY.md).
 

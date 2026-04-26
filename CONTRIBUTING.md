@@ -36,18 +36,28 @@ For signed/notarized release artifacts, see [Release process](#release-process) 
 
 ```
 src/                    Swift source (single file, EventKit wrapper)
-mcpb/                   Claude Desktop / Cowork extension
+npm-package/            npm-published MCP server (single source of truth)
 ├── server/index.js     Node.js MCP wrapper
+├── scripts/install-binary.js  postinstall: download + verify signed binary
+├── package.json        npm package metadata
+└── server.json         MCP Registry server descriptor
+mcpb/                   Claude Desktop / Cowork extension build set
 ├── manifest.json       MCPB manifest (spec 0.3)
-└── package.json        npm deps (MCP SDK)
-skills/apple-reminders/ Claude Code skill
+├── package.json        bundled-runtime npm deps (MCP SDK)
+└── icon.png
+skills/apple-reminders/ Claude Code skill (AppleScript fallback for flagged)
 ├── SKILL.md            Skill definition + protocol docs
-├── lib/                Shared AppleScript helpers (flagged fallback only)
+├── lib/                Shared AppleScript helpers
 └── scripts/            AppleScript fallback scripts
 .claude-plugin/         Claude Code Plugin Directory manifest
+hooks/                  Plugin SessionStart hook (downloads binary)
+scripts/                install-binary.sh + notarize.sh
 build.sh                Orchestrator — binary / skill / mcpb / clean / all
 .github/workflows/      CI + signed release pipeline
 ```
+
+The Node MCP server source lives only in `npm-package/server/`. The `.mcpb`
+build copies it from there at packing time so there is no duplicate to drift.
 
 ## Coding standards
 
@@ -58,7 +68,7 @@ build.sh                Orchestrator — binary / skill / mcpb / clean / all
 - Read JSON payloads via stdin when the argv slot is `"-"`. Never parse untrusted content from argv.
 - Keep the file single-source, no external Swift packages — simplifies notarization.
 
-**Node.js (`mcpb/server/index.js`):**
+**Node.js (`npm-package/server/index.js`):**
 
 - ES modules (`"type": "module"`). No CommonJS.
 - No new dependencies without discussion — the wrapper must stay thin.
@@ -76,7 +86,9 @@ Error codes in use: `LIST_NOT_FOUND`, `LIST_AMBIGUOUS`, `REMINDER_NOT_FOUND`, `I
 ```bash
 ./build.sh binary                                       # compile Swift
 ./dist/reminders-eventkit list-lists                    # smoke-test
-cd mcpb && npm ci && node -e 'import("./server/index.js")'
+cd npm-package && npm ci --ignore-scripts \
+  && REMINDERS_BINARY=$PWD/../dist/reminders-eventkit \
+       node -e 'import("./server/index.js")'
 ~/.local/bin/mcpb validate mcpb/manifest.json           # validate manifest
 ```
 
@@ -98,7 +110,7 @@ node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/plugin.json"))'
 
 1. Fork and branch from `main`.
 2. Keep PRs focused — one feature / one fix.
-3. Update `CHANGELOG.md` under `## [Unreleased]`.
+3. Update `CHANGELOG.md` under the `## [Unreleased]` heading.
 4. Tests pass locally (`./build.sh && mcpb validate mcpb/manifest.json`).
 5. No new runtime dependencies without maintainer agreement.
 

@@ -19,14 +19,11 @@ jobs:
     name: Build, sign, notarize, publish
     runs-on: macos-14
     timeout-minutes: 60
-    env:
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
     steps:
+      # actions/checkout@v6.0.2
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
 
@@ -46,13 +43,14 @@ jobs:
       - name: Verify manifest versions match tag
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          jq -er --arg v "$VERSION" 'if .version == $v then true else error("mcpb/manifest.json version \(.version) ≠ tag \($v)") end' mcpb/manifest.json
-          jq -er --arg v "$VERSION" 'if .version == $v then true else error("npm-package/package.json version \(.version) ≠ tag \($v)") end' npm-package/package.json
-          jq -er --arg v "$VERSION" 'if .version == $v then true else error(".claude-plugin/plugin.json version \(.version) ≠ tag \($v)") end' .claude-plugin/plugin.json
-          jq -er --arg v "$VERSION" 'if .version == $v then true else error("npm-package/server.json version \(.version) ≠ tag \($v)") end' npm-package/server.json
+          for f in mcpb/manifest.json mcpb/package.json npm-package/package.json npm-package/server.json .claude-plugin/plugin.json; do
+            jq -er --arg v "$VERSION" --arg f "$f" \
+              'if .version == $v then true else error("\($f) version \(.version) ≠ tag \($v)") end' "$f"
+          done
 
+      # actions/setup-node@v6.4.0
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
@@ -105,6 +103,10 @@ jobs:
         run: ./build.sh mcpb
 
       - name: Notarize .mcpb bundle
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: ./scripts/notarize.sh dist/apple-reminders.mcpb
 
       - name: Validate bundle integrity
@@ -115,6 +117,22 @@ jobs:
           unzip -p dist/apple-reminders.mcpb bin/reminders-eventkit > /tmp/bin-extract
           chmod +x /tmp/bin-extract
           codesign --verify --verbose /tmp/bin-extract
+
+      # GitHub Release MUST be created BEFORE the npm package is published.
+      # The npm postinstall fetches the binary from this release URL; if npm
+      # publishes first and the release step then fails, the npm version is
+      # immutable and broken for fresh installs.
+      # softprops/action-gh-release@v3.0.0
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body_path: .github/release-body.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/apple-reminders.mcpb
+            dist/reminders-eventkit
 
       - name: Stage npm-package with signed binary
         run: |
@@ -132,27 +150,30 @@ jobs:
           # download it via the postinstall script. Remove before pack.
           rm -f bin/reminders-eventkit
           npm publish --access public
-          rm -rf bin
-          mkdir -p bin
-          cp ../dist/reminders-eventkit bin/reminders-eventkit
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.tag }}
-          body_path: .github/release-body.md
-          fail_on_unmatched_files: true
-          files: |
-            dist/apple-reminders.mcpb
-            dist/reminders-eventkit
-
-      - name: Install mcp-publisher
+      - name: Install mcp-publisher (pinned + checksum-verified)
         run: |
+          MCP_PUBLISHER_VERSION=v1.7.0
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
           ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${OS}_${ARCH}.tar.gz" \
-            | tar -xz -C "$RUNNER_TEMP" mcp-publisher
+          ASSET="mcp-publisher_${OS}_${ARCH}.tar.gz"
+
+          # Hashes from the v1.7.0 release's checksums file. Update on bump.
+          # `case` instead of `declare -A` so this works on Bash 3.2 (macOS).
+          case "${OS}_${ARCH}" in
+            darwin_arm64) EXPECTED=9bad6be86bcdda29d037c2af6e0fa635fd2709830ecefe2ece6fc2b81dcfe1f2 ;;
+            darwin_amd64) EXPECTED=7b0bf82c74453f39e4030c11fccfe9ea3019786982b473be6b4e0fdfac6c2ca4 ;;
+            linux_arm64)  EXPECTED=e4412248080b3646601724f672f3aad742d1043c8b7d98e8b0cf4162f37053f7 ;;
+            linux_amd64)  EXPECTED=5c61dd7dd33bbf00c9c0f569d3dc2f95bbbbfec0c6951a681a2dd573cb376851 ;;
+            *) echo "no pinned checksum for ${OS}_${ARCH}" >&2; exit 1 ;;
+          esac
+
+          curl -fsSL -o "$RUNNER_TEMP/$ASSET" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${ASSET}"
+
+          echo "${EXPECTED}  $RUNNER_TEMP/$ASSET" | shasum -a 256 -c -
+
+          tar -xz -C "$RUNNER_TEMP" -f "$RUNNER_TEMP/$ASSET" mcp-publisher
           chmod +x "$RUNNER_TEMP/mcp-publisher"
 
       - name: Publish to MCP Registry

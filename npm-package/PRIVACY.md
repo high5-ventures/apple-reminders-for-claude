@@ -10,7 +10,9 @@ Apple Reminders for Claude is a **local-only** extension. Your reminder data nev
 
 ## Data we collect
 
-**None.** The extension performs no network requests to any high5 ventures service. There is no analytics SDK, no telemetry, no crash reporting, and no update check operated by high5 ventures.
+**None.** Once installed, the extension performs no network I/O at runtime — no analytics SDK, no telemetry, no crash reporting, no update checks operated by high5 ventures, and no requests to any high5 ventures service.
+
+The npm package's postinstall script downloads the signed Swift binary from `github.com/high5-ventures/apple-reminders-for-claude/releases/...` on first install (and refuses to install if the signature does not chain to `Developer ID Application: high5 ventures GmbH`). That download is anonymous from our side — we do not run a server and have no log of who downloaded what; GitHub may keep its own access logs per its own privacy policy.
 
 ## Data the extension accesses locally
 
