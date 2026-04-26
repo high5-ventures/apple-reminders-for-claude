@@ -1,5 +1,5 @@
 {
-  "name": "@byte5ai/apple-reminders-mcp",
+  "name": "@high5ventures/apple-reminders-mcp",
   "version": "1.0.0",
   "description": "Fast, native MCP server for macOS Apple Reminders via Apple EventKit. 10–200× faster than AppleScript.",
   "type": "module",
@@ -7,7 +7,7 @@
   "bin": {
     "apple-reminders-mcp": "./bin/apple-reminders-mcp.js"
   },
-  "mcpName": "io.github.byte5ai/apple-reminders",
+  "mcpName": "io.github.high5-ventures/apple-reminders",
   "files": [
     "server/",
     "bin/",
@@ -30,19 +30,19 @@
     "tasks",
     "todo"
   ],
-  "homepage": "https://github.com/byte5ai/apple-reminders-for-claude#readme",
+  "homepage": "https://github.com/high5-ventures/apple-reminders-for-claude#readme",
   "bugs": {
-    "url": "https://github.com/byte5ai/apple-reminders-for-claude/issues",
-    "email": "hello@byte5.de"
+    "url": "https://github.com/high5-ventures/apple-reminders-for-claude/issues",
+    "email": "info@h5ventures.de"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/byte5ai/apple-reminders-for-claude.git"
+    "url": "git+https://github.com/high5-ventures/apple-reminders-for-claude.git"
   },
   "author": {
-    "name": "byte5 GmbH",
-    "email": "hello@byte5.de",
-    "url": "https://byte5.de"
+    "name": "high5 ventures GmbH",
+    "email": "info@h5ventures.de",
+    "url": "https://h5ventures.de"
   },
   "license": "MIT",
   "os": ["darwin"],

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright (c) 2026 byte5 GmbH
+# Copyright (c) 2026 high5 ventures GmbH
 # SPDX-License-Identifier: MIT
 #
 # Build all distribution artifacts from the single Swift source.

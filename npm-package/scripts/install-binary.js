@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 
 if (process.platform !== "darwin") {
   console.warn(
-    `@byte5ai/apple-reminders-mcp only runs on macOS (got ${process.platform}) — skipping binary download.`
+    `@high5ventures/apple-reminders-mcp only runs on macOS (got ${process.platform}) — skipping binary download.`
   );
   process.exit(0);
 }
@@ -30,7 +30,7 @@ const version = pkg.version;
 
 const binDir = resolve(here, "..", "bin");
 const target = resolve(binDir, "reminders-eventkit");
-const url = `https://github.com/byte5ai/apple-reminders-for-claude/releases/download/v${version}/reminders-eventkit`;
+const url = `https://github.com/high5-ventures/apple-reminders-for-claude/releases/download/v${version}/reminders-eventkit`;
 
 mkdirSync(binDir, { recursive: true });
 
@@ -71,9 +71,9 @@ try {
 
   const identity = spawnSync("codesign", ["-dv", tmp], { encoding: "utf8" });
   const combined = (identity.stderr || "") + (identity.stdout || "");
-  if (!/Authority=Developer ID Application: byte5 GmbH/.test(combined)) {
+  if (!/Authority=Developer ID Application: high5 ventures GmbH/.test(combined)) {
     throw new Error(
-      `unexpected signer — expected 'Developer ID Application: byte5 GmbH'\n${combined}`
+      `unexpected signer — expected 'Developer ID Application: high5 ventures GmbH'\n${combined}`
     );
   }
 
@@ -85,7 +85,7 @@ try {
   console.error(
     `apple-reminders-mcp postinstall failed: ${err.message || err}\n` +
       `You can still build the binary locally from source:\n` +
-      `  git clone https://github.com/byte5ai/apple-reminders-for-claude\n` +
+      `  git clone https://github.com/high5-ventures/apple-reminders-for-claude\n` +
       `  cd apple-reminders-for-claude && ./build.sh binary\n` +
       `  cp dist/reminders-eventkit "${target}"`
   );

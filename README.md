@@ -9,7 +9,7 @@ Fast, native Apple Reminders access for Claude — works in **Claude Desktop**, 
 
 No AppleScript, no unstable positional IDs, no 30-second MCP timeouts. Sub-second latency on databases with hundreds of reminders. Full UTF-8 support for German umlauts, accents, CJK characters, and emoji.
 
-**Published by [byte5 GmbH](https://byte5.de)** — signed with `Developer ID Application: byte5 GmbH` and notarized by Apple.
+**Published by [high5 ventures GmbH](https://h5ventures.de)** — signed with `Developer ID Application: high5 ventures GmbH` and notarized by Apple.
 
 ---
 
@@ -21,7 +21,7 @@ Apple Reminders for Claude gives Claude full CRUD access to your macOS Reminders
 |---|---|---|
 | **Claude Desktop / Cowork** | `.mcpb` bundle | Anthropic Desktop Extensions Directory |
 | **Claude Code** (CLI) | Plugin with skill | Claude Code Plugin Directory |
-| **Any MCP client** | npm package | MCP Registry (`io.github.byte5ai/apple-reminders`) |
+| **Any MCP client** | npm package | MCP Registry (`io.github.high5-ventures/apple-reminders`) |
 
 All three paths share the same Swift binary and the same MCP protocol surface, so behavior is identical everywhere.
 
@@ -40,7 +40,7 @@ All three paths share the same Swift binary and the same MCP protocol surface, s
 
 ### Option 1 — Claude Desktop / Cowork (recommended for most users)
 
-Install from the **Anthropic Desktop Extensions Directory** (in-app search) or download the latest signed `.mcpb` from [Releases](https://github.com/byte5ai/apple-reminders-for-claude/releases) and double-click it. Claude Desktop shows an install dialog; click **Install**, then on the first tool call, grant Reminders access in the macOS privacy prompt.
+Install from the **Anthropic Desktop Extensions Directory** (in-app search) or download the latest signed `.mcpb` from [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) and double-click it. Claude Desktop shows an install dialog; click **Install**, then on the first tool call, grant Reminders access in the macOS privacy prompt.
 
 ### Option 2 — Claude Code CLI
 
@@ -48,25 +48,25 @@ Install from the **Anthropic Desktop Extensions Directory** (in-app search) or d
 /plugin install apple-reminders@claude-plugins-official
 ```
 
-…or add the byte5 marketplace directly from GitHub:
+…or add the high5 ventures marketplace directly from GitHub:
 
 ```shell
-/plugin marketplace add byte5ai/apple-reminders-for-claude
-/plugin install apple-reminders@byte5ai-apple-reminders-for-claude
+/plugin marketplace add high5-ventures/apple-reminders-for-claude
+/plugin install apple-reminders@high5-apple-reminders-for-claude
 ```
 
 ### Option 3 — Any MCP-compatible client (Cursor, Zed, etc.)
 
 ```shell
-npm install -g @byte5ai/apple-reminders-mcp
+npm install -g @high5ventures/apple-reminders-mcp
 ```
 
-Then point your client at `@byte5ai/apple-reminders-mcp` as a stdio MCP server. See your client's documentation for configuration specifics.
+Then point your client at `@high5ventures/apple-reminders-mcp` as a stdio MCP server. See your client's documentation for configuration specifics.
 
 ### Build from source
 
 ```shell
-git clone https://github.com/byte5ai/apple-reminders-for-claude.git
+git clone https://github.com/high5-ventures/apple-reminders-for-claude.git
 cd apple-reminders-for-claude
 ./build.sh
 ```
@@ -165,7 +165,7 @@ All 13 tools return a stable JSON envelope — `{ "status": "ok", "data": ... }`
 
 ## Privacy policy
 
-This extension is **100% local**. No data leaves your Mac via this extension. byte5 GmbH operates no server and collects no telemetry.
+This extension is **100% local**. No data leaves your Mac via this extension. high5 ventures GmbH operates no server and collects no telemetry.
 
 Read the full policy: [PRIVACY.md](PRIVACY.md).
 
@@ -180,7 +180,7 @@ codesign --verify --verbose /Applications/Claude.app/Contents/Resources/mcpb/app
 spctl --assess --type execute /Applications/Claude.app/Contents/Resources/mcpb/apple-reminders/bin/reminders-eventkit
 ```
 
-If either fails, you may have downloaded a tampered copy — re-download from the official [Releases](https://github.com/byte5ai/apple-reminders-for-claude/releases) page.
+If either fails, you may have downloaded a tampered copy — re-download from the official [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) page.
 
 **"List not found" or "Multiple lists with that name"** — reminder lists are matched by exact name. Use `get_lists` first to see available names. For duplicates, the error response includes a `candidates` array with stable `calendar_identifier`s; re-call with `id:<calendar_identifier>` as the list argument.
 
@@ -190,9 +190,9 @@ If either fails, you may have downloaded a tampered copy — re-download from th
 
 ## Support
 
-- **Bug reports & feature requests:** <https://github.com/byte5ai/apple-reminders-for-claude/issues>
-- **Security vulnerabilities:** `hello@byte5.de` — see [SECURITY.md](SECURITY.md)
-- **General contact:** `hello@byte5.de`
+- **Bug reports & feature requests:** <https://github.com/high5-ventures/apple-reminders-for-claude/issues>
+- **Security vulnerabilities:** `info@h5ventures.de` — see [SECURITY.md](SECURITY.md)
+- **General contact:** `info@h5ventures.de`
 
 ## Architecture
 
@@ -202,7 +202,7 @@ Claude Desktop / Cowork           Claude Code CLI                Any MCP client 
         │  (stdio MCP)                   │  (Bash via plugin)                │  (stdio MCP)
         ▼                                ▼                                   ▼
     Node wrapper                 reminders-eventkit                    Node wrapper
-   (server/index.js)            (Swift binary, direct)               (npm @byte5ai/…)
+   (server/index.js)            (Swift binary, direct)               (npm @high5ventures/…)
         │                                │                                   │
         ▼                                │                                   ▼
  reminders-eventkit                      │                          reminders-eventkit
@@ -221,7 +221,7 @@ One Swift source → one binary → three distribution paths. See [CONTRIBUTING.
 
 ## License
 
-Copyright © 2026 byte5 GmbH. Released under the **MIT License** — see [LICENSE](LICENSE).
+Copyright © 2026 high5 ventures GmbH. Released under the **MIT License** — see [LICENSE](LICENSE).
 
 This project is not affiliated with or endorsed by Apple Inc. or Anthropic PBC.
 

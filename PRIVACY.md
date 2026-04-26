@@ -1,16 +1,16 @@
 # Privacy Policy — Apple Reminders for Claude
 
 **Effective date:** 2026-04-14
-**Publisher:** byte5 GmbH, Germany
-**Contact:** hello@byte5.de
+**Publisher:** high5 ventures GmbH, Germany
+**Contact:** info@h5ventures.de
 
 ## TL;DR
 
-Apple Reminders for Claude is a **local-only** extension. Your reminder data never leaves your Mac. byte5 GmbH does not operate any server, does not collect any telemetry, does not log any usage, and has no ability to see or access your reminders, lists, or any derived data.
+Apple Reminders for Claude is a **local-only** extension. Your reminder data never leaves your Mac. high5 ventures GmbH does not operate any server, does not collect any telemetry, does not log any usage, and has no ability to see or access your reminders, lists, or any derived data.
 
 ## Data we collect
 
-**None.** The extension performs no network requests to any byte5 service. There is no analytics SDK, no telemetry, no crash reporting, and no update check operated by byte5.
+**None.** The extension performs no network requests to any high5 ventures service. There is no analytics SDK, no telemetry, no crash reporting, and no update check operated by high5 ventures.
 
 ## Data the extension accesses locally
 
@@ -28,7 +28,7 @@ All data is read from and written back to your local macOS Reminders database. N
 
 When you use this extension inside Claude Desktop, Claude Code, or Claude.ai Cowork, the reminder data returned by our tools is passed into the Claude conversation context so the model can reason about it. That data is then subject to **Anthropic's own privacy policy and terms** — see <https://www.anthropic.com/legal/privacy>.
 
-byte5 GmbH has no relationship with, and no visibility into, that data flow. We are a third-party extension publisher; Anthropic operates the Claude product.
+high5 ventures GmbH has no relationship with, and no visibility into, that data flow. We are a third-party extension publisher; Anthropic operates the Claude product.
 
 ## Data sent to Apple
 
@@ -36,11 +36,11 @@ The extension uses Apple's on-device EventKit framework. If you have iCloud sync
 
 ## Third parties
 
-byte5 GmbH does not share, sell, or disclose any data to third parties. The extension has no third-party dependencies that communicate over the network.
+high5 ventures GmbH does not share, sell, or disclose any data to third parties. The extension has no third-party dependencies that communicate over the network.
 
 ## Data retention
 
-byte5 GmbH retains no user data because byte5 GmbH receives no user data.
+high5 ventures GmbH retains no user data because high5 ventures GmbH receives no user data.
 
 ## Children
 
@@ -48,13 +48,13 @@ The extension is general-purpose productivity software and is not directed at ch
 
 ## Your rights (GDPR, CCPA, LGPD)
 
-Because byte5 GmbH does not process any personal data in connection with this extension, standard data-subject rights (access, rectification, deletion, portability) have no data to act on. If you have concerns about data processed by Anthropic or Apple, please direct requests to those parties using the links above.
+Because high5 ventures GmbH does not process any personal data in connection with this extension, standard data-subject rights (access, rectification, deletion, portability) have no data to act on. If you have concerns about data processed by Anthropic or Apple, please direct requests to those parties using the links above.
 
 If you wish to delete all reminder data on your device, do so through the macOS Reminders app.
 
 ## Source code and auditability
 
-This extension is open source under the MIT License. You can audit the complete implementation at <https://github.com/byte5ai/apple-reminders-for-claude>. Every release is signed with a Developer ID Application certificate issued to byte5 GmbH and notarized by Apple.
+This extension is open source under the MIT License. You can audit the complete implementation at <https://github.com/high5-ventures/apple-reminders-for-claude>. Every release is signed with a Developer ID Application certificate issued to high5 ventures GmbH and notarized by Apple.
 
 ## Changes
 
@@ -62,5 +62,5 @@ We will update this policy only if the extension's data handling materially chan
 
 ## Contact
 
-For privacy questions: **hello@byte5.de**
-For bug reports and feature requests: <https://github.com/byte5ai/apple-reminders-for-claude/issues>
+For privacy questions: **info@h5ventures.de**
+For bug reports and feature requests: <https://github.com/high5-ventures/apple-reminders-for-claude/issues>

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Copyright (c) 2026 byte5 GmbH
+// Copyright (c) 2026 high5 ventures GmbH
 // SPDX-License-Identifier: MIT
 //
 // apple-reminders MCP server — thin stdio wrapper around the bundled
@@ -130,7 +130,7 @@ function envelopeToMcpResult(envelope) {
 //   idempotentHint  — calling twice with the same args has the same effect
 //   openWorldHint   — tool reaches out beyond the local machine
 //
-// Every byte5 reminders tool is local-only, so openWorldHint is always false.
+// Every reminders tool is local-only, so openWorldHint is always false.
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
 const ADDITIVE = {
   readOnlyHint: false,

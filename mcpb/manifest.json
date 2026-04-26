@@ -6,20 +6,20 @@
   "description": "Read, write, and manage macOS Reminders via Apple's native EventKit framework — 10–200× faster than AppleScript alternatives.",
   "long_description": "Apple Reminders for Claude provides full CRUD access to your macOS Reminders through Claude Desktop. It wraps Apple's native EventKit framework in a signed, notarized Swift binary, returning stable UUIDs and structured JSON. Thirteen tools cover the full reminder lifecycle: list reminder lists, list reminders (open/completed/all), full-text search, today/overdue/scheduled smart queries, and create/update/complete/uncomplete/delete by ID. All data stays on-device — no network calls. Requires macOS 11+ and grants Reminders access via macOS's standard TCC privacy prompt on first use. Works identically in any language; the tool descriptions match on intent, not keywords. This extension is not affiliated with or endorsed by Apple Inc.",
   "author": {
-    "name": "byte5 GmbH",
-    "url": "https://byte5.de",
-    "email": "hello@byte5.de"
+    "name": "high5 ventures GmbH",
+    "url": "https://h5ventures.de",
+    "email": "info@h5ventures.de"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/byte5ai/apple-reminders-for-claude"
+    "url": "https://github.com/high5-ventures/apple-reminders-for-claude"
   },
-  "homepage": "https://github.com/byte5ai/apple-reminders-for-claude",
-  "documentation": "https://github.com/byte5ai/apple-reminders-for-claude#readme",
-  "support": "https://github.com/byte5ai/apple-reminders-for-claude/issues",
+  "homepage": "https://github.com/high5-ventures/apple-reminders-for-claude",
+  "documentation": "https://github.com/high5-ventures/apple-reminders-for-claude#readme",
+  "support": "https://github.com/high5-ventures/apple-reminders-for-claude/issues",
   "icon": "icon.png",
   "privacy_policies": [
-    "https://raw.githubusercontent.com/byte5ai/apple-reminders-for-claude/main/PRIVACY.md"
+    "https://raw.githubusercontent.com/high5-ventures/apple-reminders-for-claude/main/PRIVACY.md"
   ],
   "tools": [
     { "name": "get_lists", "description": "List all reminder lists with open and completed counts." },

@@ -83,9 +83,9 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
 
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
-            | awk -F'"' '/Developer ID Application: byte5 GmbH/ {print $2; exit}')
+            | awk -F'"' '/Developer ID Application: high5 ventures GmbH/ {print $2; exit}')
           if [[ -z "$IDENTITY" ]]; then
-            echo "No 'Developer ID Application: byte5 GmbH' identity found in keychain" >&2
+            echo "No 'Developer ID Application: high5 ventures GmbH' identity found in keychain" >&2
             security find-identity -v -p codesigning "$KEYCHAIN" >&2
             exit 1
           fi

@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <title>Apple Reminders for Claude — byte5 GmbH</title>
+  <title>Apple Reminders for Claude — high5 ventures GmbH</title>
   <!--
-    byte5 CI: Cyan primary (#00FFFF), Blau secondary (#004B73), Weiß (#FFFFFF).
-    Concept: byte5 signet (cyan circle) as background metaphor for Reminders,
-    white checkmark inside, small "5" watermark bottom-right as provenance.
+    Brand colors: Cyan primary (#00FFFF), Blau secondary (#004B73), Weiß (#FFFFFF).
+    Concept: signet circle as background metaphor for Reminders,
+    white checkmark inside, small "h5" watermark bottom-right as provenance.
+    Note: colors inherited from previous brand; revisit when high5 ventures
+    brand palette is finalized.
   -->
   <defs>
     <radialGradient id="bg" cx="0.35" cy="0.3" r="0.9">
@@ -27,7 +29,7 @@
   <!-- Rounded-square mat: macOS/iOS app-icon idiom, cyan gradient -->
   <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
 
-  <!-- byte5 signet circle: white ring at ¾ scale in upper area -->
+  <!-- Signet circle: white ring at ¾ scale in upper area -->
   <circle cx="256" cy="246" r="170" fill="#FFFFFF" opacity="0.12"/>
   <circle cx="256" cy="246" r="170" fill="none" stroke="#FFFFFF" stroke-width="4" opacity="0.35"/>
 
@@ -41,7 +43,7 @@
           stroke-linejoin="round"/>
   </g>
 
-  <!-- "5" watermark, bottom-right, byte5 Dunkelblau, low opacity -->
+  <!-- "h5" watermark, bottom-right, dark blue, low opacity -->
   <text x="462"
         y="478"
         font-family="Days One, Avenir Next LT Pro, Helvetica, Arial, sans-serif"
@@ -49,5 +51,5 @@
         font-weight="400"
         fill="#004B73"
         opacity="0.55"
-        text-anchor="end">b5</text>
+        text-anchor="end">h5</text>
 </svg>

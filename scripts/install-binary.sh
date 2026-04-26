@@ -21,7 +21,7 @@ fi
 BIN_DIR="${PLUGIN_DATA}/bin"
 BIN_PATH="${BIN_DIR}/reminders-eventkit"
 VERSION_MARKER="${BIN_DIR}/.version"
-TARGET_URL="https://github.com/byte5ai/apple-reminders-for-claude/releases/download/v${VERSION}/reminders-eventkit"
+TARGET_URL="https://github.com/high5-ventures/apple-reminders-for-claude/releases/download/v${VERSION}/reminders-eventkit"
 
 SKILL_BIN_DIR="${PLUGIN_ROOT}/skills/apple-reminders/bin"
 SKILL_BIN_LINK="${SKILL_BIN_DIR}/reminders-eventkit"
@@ -53,9 +53,9 @@ if ! codesign --verify --verbose "$TMP" 2>/dev/null; then
     exit 1
 fi
 
-# Verify the signer is byte5 GmbH, not an attacker with a different Developer ID
-if ! codesign -dv "$TMP" 2>&1 | grep -q 'Authority=Developer ID Application: byte5 GmbH'; then
-    echo "install-binary: signer mismatch — expected 'Developer ID Application: byte5 GmbH'" >&2
+# Verify the signer is high5 ventures GmbH, not an attacker with a different Developer ID
+if ! codesign -dv "$TMP" 2>&1 | grep -q 'Authority=Developer ID Application: high5 ventures GmbH'; then
+    echo "install-binary: signer mismatch — expected 'Developer ID Application: high5 ventures GmbH'" >&2
     codesign -dv "$TMP" 2>&1 >&2
     exit 1
 fi

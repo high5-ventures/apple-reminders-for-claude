@@ -4,18 +4,18 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [1.0.0] — 2026-04-14
 
-First public release under the byte5 GmbH open-source umbrella, ready for publication on the Anthropic Desktop Extensions Directory, the Claude Code Plugin Directory, and the MCP Registry.
+First public release under the high5 ventures GmbH open-source umbrella, ready for publication on the Anthropic Desktop Extensions Directory, the Claude Code Plugin Directory, and the MCP Registry.
 
 ### Added
 - **MCPB manifest v0.3 compliance** with `privacy_policies`, `repository`, `homepage`, `support`, and `icon` metadata.
 - **MCP tool annotations** (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) on every tool so Claude clients can make informed auto-run decisions.
 - **Claude Code Plugin Directory integration** via `.claude-plugin/plugin.json` and the `skills/apple-reminders/` layout.
-- **MCP Registry publication** as `io.github.byte5ai/apple-reminders`, backed by the npm package `@byte5ai/apple-reminders-mcp`.
-- **Code signing + notarization** — every release binary carries a `Developer ID Application: byte5 GmbH` signature and an Apple-notarized, stapled `.mcpb` bundle.
+- **MCP Registry publication** as `io.github.high5-ventures/apple-reminders`, backed by the npm package `@high5ventures/apple-reminders-mcp`.
+- **Code signing + notarization** — every release binary carries a `Developer ID Application: high5 ventures GmbH` signature and an Apple-notarized, stapled `.mcpb` bundle.
 - **Hardened Runtime** with EventKit entitlements declared in `entitlements.plist`.
 - **GitHub Actions release workflow** — tag-triggered, fully automated: build, sign, notarize, staple, GitHub Release, npm publish, MCP Registry publish.
 - **PRIVACY.md, SECURITY.md, CONTRIBUTING.md** — full open-source governance set.
-- **byte5-CI product icon** at 512×512.
+- **high5 ventures CI product icon** at 512×512.
 
 ### Changed
 - Upgraded `@modelcontextprotocol/sdk` from 1.11.3 to 1.29.0.
@@ -46,6 +46,6 @@ Pre-release hardening from internal code review.
 
 Initial non-public release. Swift/EventKit wrapper, 13 MCP tools, Claude Code skill, Claude Desktop `.mcpb` bundle.
 
-[1.0.0]: https://github.com/byte5ai/apple-reminders-for-claude/releases/tag/v1.0.0
-[0.1.1]: https://github.com/byte5ai/apple-reminders-for-claude/releases/tag/v0.1.1
-[0.1.0]: https://github.com/byte5ai/apple-reminders-for-claude/releases/tag/v0.1.0
+[1.0.0]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.0
+[0.1.1]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v0.1.1
+[0.1.0]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v0.1.0

@@ -13,7 +13,7 @@ if (!process.env.REMINDERS_BINARY) {
   if (!existsSync(bundledBinary)) {
     console.error(
       `apple-reminders-mcp: bundled binary not found at ${bundledBinary}.\n` +
-        `The postinstall step should have downloaded it — try 'npm rebuild @byte5ai/apple-reminders-mcp' or reinstall.`
+        `The postinstall step should have downloaded it — try 'npm rebuild @high5ventures/apple-reminders-mcp' or reinstall.`
     );
     process.exit(1);
   }

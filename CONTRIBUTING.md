@@ -19,7 +19,7 @@ Requirements:
 Clone and build:
 
 ```bash
-git clone https://github.com/byte5ai/apple-reminders-for-claude.git
+git clone https://github.com/high5-ventures/apple-reminders-for-claude.git
 cd apple-reminders-for-claude
 ./build.sh
 ```
@@ -114,16 +114,16 @@ git push origin v1.1.0
 The `.github/workflows/release.yml` workflow then:
 
 1. Builds the Swift binary on `macos-latest`
-2. Imports the `Developer ID Application: byte5 GmbH` certificate from `APPLE_CERTIFICATE_P12_BASE64`
+2. Imports the `Developer ID Application: high5 ventures GmbH` certificate from `APPLE_CERTIFICATE_P12_BASE64`
 3. Signs the binary with Hardened Runtime
 4. Packs the `.mcpb`
 5. Submits the bundle to Apple's notary service
 6. Staples the notarization ticket
 7. Publishes to GitHub Releases
-8. Publishes the npm package `@byte5ai/apple-reminders-mcp`
-9. Publishes the MCP Registry entry `io.github.byte5ai/apple-reminders`
+8. Publishes the npm package `@high5ventures/apple-reminders-mcp`
+9. Publishes the MCP Registry entry `io.github.high5-ventures/apple-reminders`
 
-Only byte5 maintainers with access to the Apple Developer account and required GitHub Secrets can cut signed releases.
+Only high5 ventures maintainers with access to the Apple Developer account and required GitHub Secrets can cut signed releases.
 
 ## License
 

@@ -13,7 +13,7 @@ We apply security fixes only to the latest minor release line. If you are runnin
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, report them privately to **hello@byte5.de** with the subject line `[security] apple-reminders-for-claude`.
+Instead, report them privately to **info@h5ventures.de** with the subject line `[security] apple-reminders-for-claude`.
 
 Include, where possible:
 
@@ -44,7 +44,7 @@ Out of scope:
 - **Local-only:** The extension performs no network I/O. Any observed outbound traffic is a bug.
 - **stdin for payloads:** User content is passed to the Swift binary via stdin, never through shell arguments, to eliminate injection from untrusted LLM-generated strings.
 - **TCC permission:** All reminder access is gated by macOS's standard privacy prompt. The user must grant access once and can revoke it at any time.
-- **Signed + notarized binary:** Every release binary is signed with `Developer ID Application: byte5 GmbH` and stapled by Apple's notary service. Verify with `codesign --verify --verbose $BINARY` and `spctl --assess --type execute $BINARY`.
+- **Signed + notarized binary:** Every release binary is signed with `Developer ID Application: high5 ventures GmbH` and stapled by Apple's notary service. Verify with `codesign --verify --verbose $BINARY` and `spctl --assess --type execute $BINARY`.
 - **Hardened Runtime:** The binary ships with Hardened Runtime enabled. Only EventKit-related entitlements are declared.
 - **Reproducible builds:** `mcpb/package-lock.json` is committed; `build.sh` uses `npm ci` to eliminate resolver drift.
 
