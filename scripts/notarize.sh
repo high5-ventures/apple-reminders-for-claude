@@ -57,10 +57,17 @@ if [[ "$STATUS" != "Accepted" ]]; then
 fi
 
 case "$TARGET" in
-  *.mcpb|*.pkg|*.dmg|*.app)
+  *.pkg|*.dmg|*.app)
     echo "[notarize] stapling ticket to $TARGET"
     xcrun stapler staple "$TARGET"
     xcrun stapler validate "$TARGET"
+    ;;
+  *.mcpb)
+    # .mcpb is a zip but not a registered Apple bundle format, so
+    # `xcrun stapler` refuses ("incapable of working with Document
+    # files"). The notarization ticket is on Apple's servers and
+    # Gatekeeper fetches it online on first launch — no stapling needed.
+    echo "[notarize] $TARGET is .mcpb; ticket is server-side, no offline staple." >&2
     ;;
   *)
     echo "[notarize] $TARGET is not staplable; notarization is online-only." >&2

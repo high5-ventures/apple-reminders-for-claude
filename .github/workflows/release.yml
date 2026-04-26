@@ -110,7 +110,11 @@ jobs:
       - name: Validate bundle integrity
         run: |
           ~/.local/bin/mcpb validate mcpb/manifest.json || mcpb validate mcpb/manifest.json
-          xcrun stapler validate dist/apple-reminders.mcpb
+          # .mcpb cannot be stapled (see scripts/notarize.sh) — verify the
+          # bundled binary's hardened-runtime signature instead.
+          unzip -p dist/apple-reminders.mcpb bin/reminders-eventkit > /tmp/bin-extract
+          chmod +x /tmp/bin-extract
+          codesign --verify --verbose /tmp/bin-extract
 
       - name: Stage npm-package with signed binary
         run: |
