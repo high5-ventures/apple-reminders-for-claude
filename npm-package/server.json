@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.high5-ventures/apple-reminders",
-  "description": "Fast, native MCP server for macOS Apple Reminders via Apple EventKit. 10–200× faster than AppleScript.",
+  "description": "Fast, native macOS Apple Reminders via EventKit. 10-200x faster than AppleScript alternatives.",
   "repository": {
     "url": "https://github.com/high5-ventures/apple-reminders-for-claude",
     "source": "github"
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@high5ventures/apple-reminders-mcp",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "transport": {
         "type": "stdio"
       }

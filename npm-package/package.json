@@ -1,6 +1,6 @@
 {
   "name": "@high5ventures/apple-reminders-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Fast, native MCP server for macOS Apple Reminders via Apple EventKit. 10–200× faster than AppleScript.",
   "type": "module",
   "main": "server/index.js",
@@ -45,7 +45,9 @@
     "url": "https://h5ventures.de"
   },
   "license": "MIT",
-  "os": ["darwin"],
+  "os": [
+    "darwin"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },

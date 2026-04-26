@@ -1,6 +1,6 @@
 {
   "name": "apple-reminders",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Fast, native Apple Reminders access for Claude Code via a signed Swift/EventKit binary. 10–200× faster than AppleScript.",
   "author": {
     "name": "high5 ventures GmbH",

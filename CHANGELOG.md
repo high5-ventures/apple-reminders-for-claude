@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-04-26
+
+Hotfix for MCP Registry validation on first publish — the v1.0.0 npm package and GitHub Release are valid; only the MCP Registry submission failed.
+
+### Fixed
+- `npm-package/server.json` description trimmed to ≤100 characters as required by MCP Registry validation (was 105).
+- `src/entitlements.plist` no longer contains XML comments — Apple's `AMFIUnserializeXML` (used by `codesign`) rejected them while `plutil` accepted them silently.
+- `scripts/notarize.sh` skips `xcrun stapler` for `.mcpb` files (Apple's stapler does not support that bundle format); notarization ticket is resolved online instead.
+
 ## [1.0.0] — 2026-04-14
 
 First public release under the high5 ventures GmbH open-source umbrella, ready for publication on the Anthropic Desktop Extensions Directory, the Claude Code Plugin Directory, and the MCP Registry.
@@ -46,6 +55,7 @@ Pre-release hardening from internal code review.
 
 Initial non-public release. Swift/EventKit wrapper, 13 MCP tools, Claude Code skill, Claude Desktop `.mcpb` bundle.
 
+[1.0.1]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.1
 [1.0.0]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.0
 [0.1.1]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v0.1.1
 [0.1.0]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v0.1.0

@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "apple-reminders",
   "display_name": "Apple Reminders",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Read, write, and manage macOS Reminders via Apple's native EventKit framework — 10–200× faster than AppleScript alternatives.",
   "long_description": "Apple Reminders for Claude provides full CRUD access to your macOS Reminders through Claude Desktop. It wraps Apple's native EventKit framework in a signed, notarized Swift binary, returning stable UUIDs and structured JSON. Thirteen tools cover the full reminder lifecycle: list reminder lists, list reminders (open/completed/all), full-text search, today/overdue/scheduled smart queries, and create/update/complete/uncomplete/delete by ID. All data stays on-device — no network calls. Requires macOS 11+ and grants Reminders access via macOS's standard TCC privacy prompt on first use. Works identically in any language; the tool descriptions match on intent, not keywords. This extension is not affiliated with or endorsed by Apple Inc.",
   "author": {
@@ -22,26 +22,67 @@
     "https://raw.githubusercontent.com/high5-ventures/apple-reminders-for-claude/main/PRIVACY.md"
   ],
   "tools": [
-    { "name": "get_lists", "description": "List all reminder lists with open and completed counts." },
-    { "name": "get_list_info", "description": "Get metadata for one reminder list by exact name." },
-    { "name": "list_reminders", "description": "List reminders in a specific list, filtered by open/completed/all." },
-    { "name": "search_reminders", "description": "Full-text search across all reminder lists (title and notes)." },
-    { "name": "get_today", "description": "Get open reminders due today across all lists." },
-    { "name": "get_overdue", "description": "Get overdue open reminders across all lists." },
-    { "name": "get_scheduled", "description": "Get all open reminders with a due date." },
-    { "name": "get_reminder", "description": "Fetch a single reminder by its stable EventKit UUID." },
-    { "name": "create_reminder", "description": "Create a new reminder in a specified list." },
-    { "name": "update_reminder", "description": "Update an existing reminder by ID." },
-    { "name": "complete_reminder", "description": "Mark a reminder as completed." },
-    { "name": "uncomplete_reminder", "description": "Unmark a completed reminder (set back to open)." },
-    { "name": "delete_reminder", "description": "Permanently delete a reminder by ID." }
+    {
+      "name": "get_lists",
+      "description": "List all reminder lists with open and completed counts."
+    },
+    {
+      "name": "get_list_info",
+      "description": "Get metadata for one reminder list by exact name."
+    },
+    {
+      "name": "list_reminders",
+      "description": "List reminders in a specific list, filtered by open/completed/all."
+    },
+    {
+      "name": "search_reminders",
+      "description": "Full-text search across all reminder lists (title and notes)."
+    },
+    {
+      "name": "get_today",
+      "description": "Get open reminders due today across all lists."
+    },
+    {
+      "name": "get_overdue",
+      "description": "Get overdue open reminders across all lists."
+    },
+    {
+      "name": "get_scheduled",
+      "description": "Get all open reminders with a due date."
+    },
+    {
+      "name": "get_reminder",
+      "description": "Fetch a single reminder by its stable EventKit UUID."
+    },
+    {
+      "name": "create_reminder",
+      "description": "Create a new reminder in a specified list."
+    },
+    {
+      "name": "update_reminder",
+      "description": "Update an existing reminder by ID."
+    },
+    {
+      "name": "complete_reminder",
+      "description": "Mark a reminder as completed."
+    },
+    {
+      "name": "uncomplete_reminder",
+      "description": "Unmark a completed reminder (set back to open)."
+    },
+    {
+      "name": "delete_reminder",
+      "description": "Permanently delete a reminder by ID."
+    }
   ],
   "server": {
     "type": "node",
     "entry_point": "server/index.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server/index.js"],
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
       "env": {
         "REMINDERS_BINARY": "${__dirname}/bin/reminders-eventkit"
       }
@@ -60,7 +101,9 @@
   "license": "MIT",
   "compatibility": {
     "claude_desktop": ">=0.10.0",
-    "platforms": ["darwin"],
+    "platforms": [
+      "darwin"
+    ],
     "runtimes": {
       "node": ">=18.0.0"
     }
