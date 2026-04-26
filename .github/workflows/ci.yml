@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Build + validate (unsigned)
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install MCPB CLI
+        run: npm install -g @anthropic-ai/mcpb
+
+      - name: Lint JSON manifests
+        run: |
+          node -e 'JSON.parse(require("fs").readFileSync("mcpb/manifest.json"))'
+          node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/plugin.json"))'
+          node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/marketplace.json"))'
+          node -e 'JSON.parse(require("fs").readFileSync("hooks/hooks.json"))'
+          node -e 'JSON.parse(require("fs").readFileSync("npm-package/package.json"))'
+          node -e 'JSON.parse(require("fs").readFileSync("npm-package/server.json"))'
+          node -e 'JSON.parse(require("fs").readFileSync("mcpb/package.json"))'
+
+      - name: Cross-check versions
+        run: |
+          MCPB_V=$(node -p 'require("./mcpb/manifest.json").version')
+          NPM_V=$(node -p 'require("./npm-package/package.json").version')
+          PLUGIN_V=$(node -p 'require("./.claude-plugin/plugin.json").version')
+          SERVER_JSON_V=$(node -p 'require("./npm-package/server.json").version')
+          MCPB_PKG_V=$(node -p 'require("./mcpb/package.json").version')
+          echo "mcpb/manifest.json: $MCPB_V"
+          echo "npm-package/package.json: $NPM_V"
+          echo ".claude-plugin/plugin.json: $PLUGIN_V"
+          echo "npm-package/server.json: $SERVER_JSON_V"
+          echo "mcpb/package.json: $MCPB_PKG_V"
+          if [[ "$MCPB_V" != "$NPM_V" || "$NPM_V" != "$PLUGIN_V" || "$PLUGIN_V" != "$SERVER_JSON_V" || "$SERVER_JSON_V" != "$MCPB_PKG_V" ]]; then
+            echo "Version drift detected across manifests" >&2
+            exit 1
+          fi
+
+      - name: Validate mcpb manifest
+        run: mcpb validate mcpb/manifest.json || mcpb validate mcpb
+
+      - name: Build unsigned binary + skill + mcpb
+        run: ./build.sh
+
+      - name: Smoke-test binary (list-lists)
+        run: |
+          # On CI the process has no TCC grant for Reminders, but the binary
+          # should still start, validate its argv, and exit cleanly with
+          # PERMISSION_DENIED — not crash.
+          set +e
+          OUTPUT=$(./dist/reminders-eventkit list-lists 2>&1)
+          EXIT=$?
+          echo "$OUTPUT"
+          set -e
+          echo "$OUTPUT" | grep -Eq '"status":"(ok|error)"' \
+            || { echo "Binary did not emit JSON envelope"; exit 1; }
+
+      - name: Verify npm package builds
+        run: |
+          cd npm-package
+          npm install --no-audit --no-fund --ignore-scripts
+          # Don't actually publish; just verify the tarball packs.
+          npm pack --dry-run
+
+      - name: Verify hooks/install-binary.sh is valid bash
+        run: bash -n scripts/install-binary.sh && bash -n scripts/notarize.sh
+
+      - name: Check no duplicated server source
+        run: |
+          # mcpb/server must NOT exist — server code lives only in npm-package/.
+          if [[ -d mcpb/server ]]; then
+            echo "mcpb/server/ should not exist — single-source-of-truth is npm-package/server/" >&2
+            exit 1
+          fi

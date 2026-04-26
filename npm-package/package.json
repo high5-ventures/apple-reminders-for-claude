@@ -1,0 +1,58 @@
+{
+  "name": "@byte5ai/apple-reminders-mcp",
+  "version": "1.0.0",
+  "description": "Fast, native MCP server for macOS Apple Reminders via Apple EventKit. 10–200× faster than AppleScript.",
+  "type": "module",
+  "main": "server/index.js",
+  "bin": {
+    "apple-reminders-mcp": "./bin/apple-reminders-mcp.js"
+  },
+  "mcpName": "io.github.byte5ai/apple-reminders",
+  "files": [
+    "server/",
+    "bin/",
+    "scripts/install-binary.js",
+    "README.md",
+    "LICENSE",
+    "PRIVACY.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install-binary.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "apple-reminders",
+    "reminders",
+    "eventkit",
+    "macos",
+    "claude",
+    "tasks",
+    "todo"
+  ],
+  "homepage": "https://github.com/byte5ai/apple-reminders-for-claude#readme",
+  "bugs": {
+    "url": "https://github.com/byte5ai/apple-reminders-for-claude/issues",
+    "email": "hello@byte5.de"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/byte5ai/apple-reminders-for-claude.git"
+  },
+  "author": {
+    "name": "byte5 GmbH",
+    "email": "hello@byte5.de",
+    "url": "https://byte5.de"
+  },
+  "license": "MIT",
+  "os": ["darwin"],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

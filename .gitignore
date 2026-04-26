@@ -1,9 +1,26 @@
+# Local Claude Code harness config (not for the repo)
+.claude/
+
 # Build artifacts
-skill/bin/reminders-eventkit
-mcpb/bin/reminders-eventkit
-mcpb/node_modules/
 dist/
 *.mcpb
+
+# Downloaded-at-install artifacts (never committed)
+skills/apple-reminders/bin/reminders-eventkit
+mcpb/bin/reminders-eventkit
+npm-package/bin/reminders-eventkit
+
+# Node
+mcpb/node_modules/
+npm-package/node_modules/
+*.tgz
+
+# Signing secrets (never committed)
+*.p12
+*.pem
+*.cer
+.env
+.env.*
 
 # macOS
 .DS_Store

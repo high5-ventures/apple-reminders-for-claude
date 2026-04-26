@@ -1,0 +1,23 @@
+{
+  "name": "apple-reminders",
+  "version": "1.0.0",
+  "description": "Fast, native Apple Reminders access for Claude Code via a signed Swift/EventKit binary. 10–200× faster than AppleScript.",
+  "author": {
+    "name": "byte5 GmbH",
+    "email": "hello@byte5.de",
+    "url": "https://byte5.de"
+  },
+  "homepage": "https://github.com/byte5ai/apple-reminders-for-claude",
+  "repository": "https://github.com/byte5ai/apple-reminders-for-claude",
+  "license": "MIT",
+  "keywords": [
+    "reminders",
+    "apple-reminders",
+    "tasks",
+    "todo",
+    "productivity",
+    "macos",
+    "eventkit"
+  ],
+  "hooks": "./hooks/hooks.json"
+}

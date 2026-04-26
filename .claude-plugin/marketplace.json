@@ -1,0 +1,14 @@
+{
+  "name": "byte5ai-apple-reminders-for-claude",
+  "owner": {
+    "name": "byte5 GmbH",
+    "url": "https://byte5.de"
+  },
+  "plugins": [
+    {
+      "name": "apple-reminders",
+      "source": ".",
+      "description": "Fast, native Apple Reminders access for Claude Code via a signed Swift/EventKit binary."
+    }
+  ]
+}

@@ -15,6 +15,18 @@ Load this skill whenever the user's intent involves Apple Reminders: listing or 
 
 Do **not** use this skill for Calendar events, Notes, Mail, or Contacts — those belong to separate skills.
 
+## Safety semantics
+
+Commands fall into three risk tiers. Respect the tier when deciding whether to confirm with the user first:
+
+| Tier | Commands | Confirmation |
+|---|---|---|
+| **read-only** | `list-lists`, `get-list-info`, `list-reminders`, `search-reminders`, `get-today`, `get-overdue`, `get-scheduled`, `get-reminder` | no confirmation needed |
+| **additive** | `create-reminder` | proceed unless user's intent is ambiguous |
+| **destructive** | `update-reminder`, `complete-reminder`, `uncomplete-reminder`, `delete-reminder` | confirm before calling when the target is inferred rather than explicitly named |
+
+Destructive operations are idempotent — running them twice yields the same end state — but they mutate user data and cannot be undone from within this skill (the user has to restore via Time Machine or iCloud).
+
 ## Prerequisites
 
 - macOS with the Reminders app present.

@@ -1,0 +1,13 @@
+.DS_Store
+*.log
+.env
+.env.*
+node_modules/.cache/
+*.tsbuildinfo
+.eslintcache
+*.swp
+.vscode/
+.idea/
+__tests__/
+*.test.js
+*.spec.js

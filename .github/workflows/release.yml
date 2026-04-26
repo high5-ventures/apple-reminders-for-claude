@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Build, sign, notarize, publish
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive release version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing tag=$TAG version=$VERSION"
+
+      - name: Verify manifest versions match tag
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          jq -er --arg v "$VERSION" 'if .version == $v then true else error("mcpb/manifest.json version \(.version) ≠ tag \($v)") end' mcpb/manifest.json
+          jq -er --arg v "$VERSION" 'if .version == $v then true else error("npm-package/package.json version \(.version) ≠ tag \($v)") end' npm-package/package.json
+          jq -er --arg v "$VERSION" 'if .version == $v then true else error(".claude-plugin/plugin.json version \(.version) ≠ tag \($v)") end' .claude-plugin/plugin.json
+          jq -er --arg v "$VERSION" 'if .version == $v then true else error("npm-package/server.json version \(.version) ≠ tag \($v)") end' npm-package/server.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install MCPB CLI
+        run: npm install -g @anthropic-ai/mcpb
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Import signing certificate
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN=build.keychain-db
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+
+          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$CERT_PATH" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security -A
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
+            | awk -F'"' '/Developer ID Application: byte5 GmbH/ {print $2; exit}')
+          if [[ -z "$IDENTITY" ]]; then
+            echo "No 'Developer ID Application: byte5 GmbH' identity found in keychain" >&2
+            security find-identity -v -p codesigning "$KEYCHAIN" >&2
+            exit 1
+          fi
+          echo "SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          rm -f "$CERT_PATH"
+
+      - name: Build signed Swift binary
+        run: ./build.sh binary
+
+      - name: Verify binary signature
+        run: |
+          codesign --verify --verbose dist/reminders-eventkit
+          spctl --assess --type execute --verbose dist/reminders-eventkit || true
+          codesign -dv --entitlements :- dist/reminders-eventkit
+
+      - name: Build .mcpb bundle
+        run: ./build.sh mcpb
+
+      - name: Notarize .mcpb bundle
+        run: ./scripts/notarize.sh dist/apple-reminders.mcpb
+
+      - name: Validate bundle integrity
+        run: |
+          ~/.local/bin/mcpb validate mcpb/manifest.json || mcpb validate mcpb/manifest.json
+          xcrun stapler validate dist/apple-reminders.mcpb
+
+      - name: Stage npm-package with signed binary
+        run: |
+          mkdir -p npm-package/bin
+          cp dist/reminders-eventkit npm-package/bin/reminders-eventkit
+          cd npm-package
+          npm install --no-audit --no-fund --ignore-scripts
+
+      - name: Publish npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd npm-package
+          # The published tarball must NOT include the local binary — end users
+          # download it via the postinstall script. Remove before pack.
+          rm -f bin/reminders-eventkit
+          npm publish --access public
+          rm -rf bin
+          mkdir -p bin
+          cp ../dist/reminders-eventkit bin/reminders-eventkit
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body_path: .github/release-body.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/apple-reminders.mcpb
+            dist/reminders-eventkit
+
+      - name: Install mcp-publisher
+        run: |
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${OS}_${ARCH}.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" mcp-publisher
+          chmod +x "$RUNNER_TEMP/mcp-publisher"
+
+      - name: Publish to MCP Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd npm-package
+          # mcp-publisher needs interactive github-oauth; for CI we use the
+          # GitHub Actions OIDC flow via the mcp-publisher github-oidc method.
+          "$RUNNER_TEMP/mcp-publisher" login github-oidc
+          "$RUNNER_TEMP/mcp-publisher" publish
+
+      - name: Clean up keychain
+        if: always()
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          security delete-keychain build.keychain-db || true

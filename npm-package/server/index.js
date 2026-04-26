@@ -122,12 +122,36 @@ function envelopeToMcpResult(envelope) {
 // Tool definitions
 // ---------------------------------------------------------------------------
 
+// Tool annotations follow MCP's ToolAnnotations schema so clients (Claude
+// Desktop, Cowork, Code) can decide when to auto-run vs. prompt the user:
+//
+//   readOnlyHint    — tool does not modify state (pure query)
+//   destructiveHint — tool may destroy or irreversibly alter existing state
+//   idempotentHint  — calling twice with the same args has the same effect
+//   openWorldHint   — tool reaches out beyond the local machine
+//
+// Every byte5 reminders tool is local-only, so openWorldHint is always false.
+const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
+const ADDITIVE = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+const DESTRUCTIVE_IDEMPOTENT = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
 const TOOLS = [
   {
     name: "get_lists",
     description:
       "List all reminder lists on this Mac with open and completed counts. No arguments.",
     inputSchema: { type: "object", properties: {} },
+    annotations: { title: "Get reminder lists", ...READ_ONLY },
   },
   {
     name: "get_list_info",
@@ -142,6 +166,7 @@ const TOOLS = [
       },
       required: ["list"],
     },
+    annotations: { title: "Get list info", ...READ_ONLY },
   },
   {
     name: "list_reminders",
@@ -163,6 +188,7 @@ const TOOLS = [
       },
       required: ["list"],
     },
+    annotations: { title: "List reminders", ...READ_ONLY },
   },
   {
     name: "search_reminders",
@@ -190,24 +216,28 @@ const TOOLS = [
       },
       required: ["query"],
     },
+    annotations: { title: "Search reminders", ...READ_ONLY },
   },
   {
     name: "get_today",
     description:
       "Get all open reminders due today (local time) across every list.",
     inputSchema: { type: "object", properties: {} },
+    annotations: { title: "Get today's reminders", ...READ_ONLY },
   },
   {
     name: "get_overdue",
     description:
       "Get all open reminders whose due date is strictly before today.",
     inputSchema: { type: "object", properties: {} },
+    annotations: { title: "Get overdue reminders", ...READ_ONLY },
   },
   {
     name: "get_scheduled",
     description:
       "Get all open reminders that have any due date (today, future, or past).",
     inputSchema: { type: "object", properties: {} },
+    annotations: { title: "Get scheduled reminders", ...READ_ONLY },
   },
   {
     name: "get_reminder",
@@ -222,6 +252,7 @@ const TOOLS = [
       },
       required: ["id"],
     },
+    annotations: { title: "Get reminder", ...READ_ONLY },
   },
   {
     name: "create_reminder",
@@ -253,6 +284,7 @@ const TOOLS = [
       },
       required: ["list", "title"],
     },
+    annotations: { title: "Create reminder", ...ADDITIVE },
   },
   {
     name: "update_reminder",
@@ -276,6 +308,7 @@ const TOOLS = [
       },
       required: ["id"],
     },
+    annotations: { title: "Update reminder", ...DESTRUCTIVE_IDEMPOTENT },
   },
   {
     name: "complete_reminder",
@@ -287,6 +320,7 @@ const TOOLS = [
       },
       required: ["id"],
     },
+    annotations: { title: "Complete reminder", ...DESTRUCTIVE_IDEMPOTENT },
   },
   {
     name: "uncomplete_reminder",
@@ -298,6 +332,7 @@ const TOOLS = [
       },
       required: ["id"],
     },
+    annotations: { title: "Uncomplete reminder", ...DESTRUCTIVE_IDEMPOTENT },
   },
   {
     name: "delete_reminder",
@@ -309,6 +344,7 @@ const TOOLS = [
       },
       required: ["id"],
     },
+    annotations: { title: "Delete reminder", ...DESTRUCTIVE_IDEMPOTENT },
   },
 ];
 
@@ -317,7 +353,7 @@ const TOOLS = [
 // ---------------------------------------------------------------------------
 
 const server = new Server(
-  { name: "apple-reminders", version: "0.1.1" },
+  { name: "apple-reminders", version: "1.0.0" },
   { capabilities: { tools: {} } }
 );
 

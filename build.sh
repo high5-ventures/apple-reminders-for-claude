@@ -3,15 +3,19 @@
 # Copyright (c) 2026 byte5 GmbH
 # SPDX-License-Identifier: MIT
 #
-# Build both distribution artifacts from the single Swift source.
+# Build all distribution artifacts from the single Swift source.
 #
 # Outputs:
-#   dist/reminders-eventkit         — compiled binary (arm64 or x86_64, matching host)
+#   dist/reminders-eventkit         — compiled binary (matches host arch)
 #   dist/apple-reminders.mcpb       — ready-to-install Claude Desktop extension
-#   dist/skill/                     — ready-to-copy Claude Code skill directory
+#   dist/skill/                     — standalone Claude Code skill directory
+#
+# Signing: set SIGNING_IDENTITY to a Developer ID to sign the binary with
+# Hardened Runtime. The release workflow sets this automatically; local
+# builds are unsigned unless you opt in.
 #
 # Usage:
-#   ./build.sh              # build everything
+#   ./build.sh              # build everything (binary + skill + mcpb)
 #   ./build.sh binary       # just the Swift binary
 #   ./build.sh skill        # just the Claude Code skill directory
 #   ./build.sh mcpb         # just the .mcpb bundle
@@ -23,25 +27,39 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 DIST="$REPO/dist"
 BINARY_SRC="$REPO/src/reminders-eventkit.swift"
 BINARY_OUT="$DIST/reminders-eventkit"
+ENTITLEMENTS="$REPO/src/entitlements.plist"
 
 build_binary() {
   echo "[build] compiling Swift binary → $BINARY_OUT"
   mkdir -p "$DIST"
   /usr/bin/swiftc -O "$BINARY_SRC" -o "$BINARY_OUT"
   chmod +x "$BINARY_OUT"
+
+  if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
+    echo "[build] signing binary with $SIGNING_IDENTITY"
+    codesign --force --options runtime --timestamp \
+      ${ENTITLEMENTS:+--entitlements "$ENTITLEMENTS"} \
+      --sign "$SIGNING_IDENTITY" \
+      "$BINARY_OUT"
+    codesign --verify --verbose "$BINARY_OUT"
+  else
+    echo "[build] SIGNING_IDENTITY not set — producing unsigned dev binary"
+  fi
+
   file "$BINARY_OUT"
 }
 
 build_skill() {
   [[ -x "$BINARY_OUT" ]] || build_binary
-  echo "[build] assembling skill directory → $DIST/skill"
+  echo "[build] assembling standalone skill directory → $DIST/skill"
   rm -rf "$DIST/skill"
   mkdir -p "$DIST/skill/bin" "$DIST/skill/lib" "$DIST/skill/scripts"
-  cp "$REPO/skill/SKILL.md"                       "$DIST/skill/"
-  cp "$REPO/skill/lib/_prelude.applescript"       "$DIST/skill/lib/"
-  cp "$REPO/skill/scripts/get_flagged.applescript" "$DIST/skill/scripts/"
-  cp "$BINARY_OUT"                                "$DIST/skill/bin/"
+  cp "$REPO/skills/apple-reminders/SKILL.md"                        "$DIST/skill/"
+  cp "$REPO/skills/apple-reminders/lib/_prelude.applescript"        "$DIST/skill/lib/"
+  cp "$REPO/skills/apple-reminders/scripts/get_flagged.applescript" "$DIST/skill/scripts/"
+  cp "$BINARY_OUT"                                                  "$DIST/skill/bin/"
   echo "[build] skill ready at $DIST/skill"
+  echo "[build] install via: cp -r $DIST/skill ~/.claude/skills/apple-reminders"
 }
 
 build_mcpb() {
@@ -50,11 +68,15 @@ build_mcpb() {
   local STAGE="$DIST/mcpb-stage"
   rm -rf "$STAGE"
   mkdir -p "$STAGE/server" "$STAGE/bin"
-  cp "$REPO/mcpb/manifest.json"      "$STAGE/"
-  cp "$REPO/mcpb/package.json"       "$STAGE/"
-  cp "$REPO/mcpb/package-lock.json"  "$STAGE/"
-  cp "$REPO/mcpb/server/index.js"    "$STAGE/server/"
-  cp "$BINARY_OUT"                   "$STAGE/bin/"
+  # Metadata + dependency set come from mcpb/; the actual server source comes
+  # from the canonical npm-package/server to avoid duplication.
+  cp "$REPO/mcpb/manifest.json"             "$STAGE/"
+  cp "$REPO/mcpb/package.json"              "$STAGE/"
+  cp "$REPO/mcpb/package-lock.json"         "$STAGE/"
+  cp "$REPO/mcpb/.mcpbignore"               "$STAGE/" 2>/dev/null || true
+  cp "$REPO/npm-package/server/index.js"    "$STAGE/server/"
+  cp "$BINARY_OUT"                          "$STAGE/bin/reminders-eventkit"
+  [[ -f "$REPO/assets/icon.png" ]] && cp "$REPO/assets/icon.png" "$STAGE/"
   # Reproducible install from the committed lockfile — no resolver drift.
   (cd "$STAGE" && npm ci --silent --omit=dev)
   command -v mcpb >/dev/null 2>&1 || {

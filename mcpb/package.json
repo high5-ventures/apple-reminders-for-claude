@@ -1,10 +1,14 @@
 {
-  "name": "apple-reminders-mcpb",
-  "version": "0.1.1",
-  "type": "module",
+  "name": "apple-reminders-mcpb-bundle",
+  "version": "1.0.0",
   "private": true,
+  "type": "module",
+  "description": "Runtime dependency set for the apple-reminders .mcpb bundle. The server code is sourced from ../npm-package at build time.",
   "main": "server/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.11.3"
+    "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

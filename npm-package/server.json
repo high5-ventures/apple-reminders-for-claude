@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.byte5ai/apple-reminders",
+  "description": "Fast, native MCP server for macOS Apple Reminders via Apple EventKit. 10–200× faster than AppleScript.",
+  "repository": {
+    "url": "https://github.com/byte5ai/apple-reminders-for-claude",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@byte5ai/apple-reminders-mcp",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
