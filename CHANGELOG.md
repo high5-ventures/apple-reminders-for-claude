@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-04-27
+
+Visual rebrand to align the product icon with the high5 ventures GmbH brand.
+
+### Changed
+- `assets/icon.svg`, `assets/icon.png`, and `mcpb/icon.png` switched from the inherited byte5-CI cyan/blue palette to the high5 ventures orange palette (`#f58220` primary, `#ff9a3e` light) with the h5 signet (`5°`) as the central glyph instead of a generic checkmark.
+
 ## [1.0.2] — 2026-04-27
 
 Hardening pass after a full code review of v1.0.1 — no externally observable behaviour changes for end users; several supply-chain, consistency, and documentation fixes.
@@ -80,7 +87,8 @@ Pre-release hardening from internal code review.
 
 Initial non-public release. Swift/EventKit wrapper, 13 MCP tools, Claude Code skill, Claude Desktop `.mcpb` bundle.
 
-[Unreleased]: https://github.com/high5-ventures/apple-reminders-for-claude/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/high5-ventures/apple-reminders-for-claude/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.3
 [1.0.2]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.2
 [1.0.1]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.1
 [1.0.0]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.0
