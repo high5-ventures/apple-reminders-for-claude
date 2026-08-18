@@ -77,9 +77,78 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts
           # Don't actually publish; just verify the tarball packs.
           npm pack --dry-run
+          # Every module the postinstall imports must be in `files`, or the
+          # published tarball fails at import time on a fresh install.
+          npm pack --dry-run --json > "$RUNNER_TEMP/pack.json"
+          node -e '
+            const files = require(process.env.RUNNER_TEMP + "/pack.json")[0]
+              .files.map((f) => f.path);
+            for (const required of [
+              "scripts/install-binary.js",
+              "scripts/verify-signature.js",
+            ]) {
+              if (!files.includes(required)) {
+                console.error(`${required} missing from npm tarball`);
+                process.exit(1);
+              }
+            }
+          '
 
       - name: Verify hooks/install-binary.sh is valid bash
-        run: bash -n scripts/install-binary.sh && bash -n scripts/notarize.sh
+        run: |
+          bash -n scripts/install-binary.sh
+          bash -n scripts/notarize.sh
+          bash -n scripts/verify-signature.sh
+
+      # The signer check is the one install step an unsigned CI build cannot
+      # exercise — and getting it wrong bricks every single install (issues
+      # #2, #3, where `codesign -dv` never prints the `Authority=` line the
+      # old check grepped for). Pin a known-good, Developer ID-signed release
+      # asset and assert both installers accept it. A negative test alone
+      # would not catch this: a malformed requirement makes codesign reject
+      # everything, so only a positive case proves the check still passes
+      # genuine binaries.
+      - name: Signer check accepts a genuine signed binary
+        run: |
+          REF=v1.0.3   # any published release works; pinned so CI does not
+                       # depend on the version currently under development
+          curl --fail --silent --location --output "$RUNNER_TEMP/ref-binary" \
+            "https://github.com/high5-ventures/apple-reminders-for-claude/releases/download/$REF/reminders-eventkit"
+          chmod +x "$RUNNER_TEMP/ref-binary"
+          ./scripts/verify-signature.sh "$RUNNER_TEMP/ref-binary"
+          node npm-package/scripts/verify-signature.js "$RUNNER_TEMP/ref-binary"
+
+      - name: Signer requirement is identical across both install paths
+        run: |
+          # The requirement is a security constant duplicated in bash and JS.
+          # Enforce equality instead of trusting a "keep in sync" comment.
+          SH=$(sed -n "s/^REQUIREMENT='\(.*\)'$/\1/p" scripts/verify-signature.sh)
+          JS=$(node -e 'import("./npm-package/scripts/verify-signature.js").then(m => console.log(m.REQUIREMENT))')
+          if [[ -z "$SH" ]]; then
+            echo "could not extract REQUIREMENT from scripts/verify-signature.sh" >&2
+            exit 1
+          fi
+          if [[ "$SH" != "$JS" ]]; then
+            echo "signer requirement drifted between install paths:" >&2
+            echo "  sh: $SH" >&2
+            echo "  js: $JS" >&2
+            exit 1
+          fi
+
+      - name: Signer check rejects a foreign signature
+        run: |
+          # Ad-hoc signed: the signature is intact, but it is not ours. Both
+          # installers must refuse it.
+          cp dist/reminders-eventkit "$RUNNER_TEMP/adhoc-binary"
+          codesign --force --sign - "$RUNNER_TEMP/adhoc-binary"
+          if ./scripts/verify-signature.sh "$RUNNER_TEMP/adhoc-binary" 2>/dev/null; then
+            echo "verify-signature.sh accepted an ad-hoc signed binary" >&2
+            exit 1
+          fi
+          if node npm-package/scripts/verify-signature.js "$RUNNER_TEMP/adhoc-binary" 2>/dev/null; then
+            echo "verify-signature.js accepted an ad-hoc signed binary" >&2
+            exit 1
+          fi
 
       - name: Check no duplicated server source
         run: |

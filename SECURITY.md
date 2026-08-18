@@ -43,7 +43,8 @@ Out of scope:
 ## Security-relevant design choices
 
 - **Local-only at runtime:** Once installed, the extension performs no network I/O. Any observed outbound runtime traffic is a bug. The npm postinstall and the Claude Code plugin SessionStart hook do download the signed Swift binary from GitHub Releases on first install (and refuse to run if the signature does not chain to `Developer ID Application: high5 ventures GmbH`); after that, the binary stays local.
-- **Signature re-verification on every start:** Both installers re-run `codesign --verify` against the cached binary on each invocation, not just at first install, so a tampered cached file is detected and replaced.
+- **Signature re-verification on every start:** Both installers re-run the signer check against the cached binary on each invocation, not just at first install, so a tampered cached file is detected and replaced.
+- **Requirement-based signer pinning:** The check evaluates a code-signing requirement via `codesign --verify -R=…` rather than parsing `codesign -d` display text. It pins the Apple anchor, the Developer ID Certification Authority, the Developer ID Application leaf, and team ID `VG5X6JCLGF`, so a validly-but-differently-signed binary is refused. CI verifies that the check accepts a genuine release binary and rejects an ad-hoc signed one.
 - **stdin for payloads:** User content is passed to the Swift binary via stdin, never through shell arguments, to eliminate injection from untrusted LLM-generated strings.
 - **Pre-TCC validation:** Filter values, integer parameters, and JSON payload shape are validated before the macOS TCC permission prompt is requested, so malformed calls do not leave a ghost permission dialog.
 - **TCC permission:** All reminder access is gated by macOS's standard privacy prompt. The user must grant access once and can revoke it at any time.

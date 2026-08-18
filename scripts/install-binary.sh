@@ -8,6 +8,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERIFY="${SCRIPT_DIR}/verify-signature.sh"
+
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/apple-reminders-unknown}"
 PLUGIN_VERSION_FILE="${PLUGIN_ROOT}/.claude-plugin/plugin.json"
@@ -32,9 +35,7 @@ mkdir -p "$BIN_DIR" "$SKILL_BIN_DIR"
 # — re-verification guards against tampering since the original install.
 if [[ -x "$BIN_PATH" && -f "$VERSION_MARKER" ]]; then
     if [[ "$(cat "$VERSION_MARKER")" == "$VERSION" ]]; then
-        if codesign --verify --verbose "$BIN_PATH" 2>/dev/null \
-           && codesign -dv "$BIN_PATH" 2>&1 \
-              | grep -q 'Authority=Developer ID Application: high5 ventures GmbH'; then
+        if "$VERIFY" "$BIN_PATH"; then
             ln -sf "$BIN_PATH" "$SKILL_BIN_LINK"
             exit 0
         fi
@@ -52,17 +53,12 @@ if ! curl --fail --silent --location --output "$TMP" "$TARGET_URL"; then
     exit 1
 fi
 
-# Verify Apple Developer signature before trusting the binary
+# Verify the signature is intact AND chains to our Developer ID before
+# trusting the binary — an attacker with a different (or no) Developer ID
+# must not get past this.
 chmod +x "$TMP"
-if ! codesign --verify --verbose "$TMP" 2>/dev/null; then
-    echo "install-binary: codesign verification failed — refusing to install" >&2
-    exit 1
-fi
-
-# Verify the signer is high5 ventures GmbH, not an attacker with a different Developer ID
-if ! codesign -dv "$TMP" 2>&1 | grep -q 'Authority=Developer ID Application: high5 ventures GmbH'; then
-    echo "install-binary: signer mismatch — expected 'Developer ID Application: high5 ventures GmbH'" >&2
-    codesign -dv "$TMP" 2>&1 >&2
+if ! "$VERIFY" "$TMP"; then
+    echo "install-binary: refusing to install unverified binary" >&2
     exit 1
 fi
 

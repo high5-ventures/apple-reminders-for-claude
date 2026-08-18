@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Fixed
+- **Signer check rejected every genuine binary** ([#2](https://github.com/high5-ventures/apple-reminders-for-claude/issues/2), [#3](https://github.com/high5-ventures/apple-reminders-for-claude/issues/3)) — both installers verified the signer by grepping `codesign -dv` output for an `Authority=` line, but `codesign` does not print `Authority=` at verbosity 1. The grep could never match, so the Claude Code plugin's SessionStart hook and the npm `postinstall` aborted with `signer mismatch` on every install and on every cached-binary re-verification, despite the downloaded binary being correctly signed and notarized. The `.mcpb` path was unaffected, which is why this went unnoticed. Both installers now evaluate a code-signing requirement (`codesign --verify -R=…`) that pins the Apple anchor, the Developer ID CA, the Developer ID Application leaf, and team `VG5X6JCLGF` — no display-text parsing.
+- **Installer diagnostics went to stdout** — the failure dump in `scripts/install-binary.sh` used `2>&1 >&2`, which redirects both streams to stdout rather than stderr, polluting the SessionStart hook's output channel.
+
+### Added
+- **`scripts/verify-signature.sh` and `npm-package/scripts/verify-signature.js`** — the signer check as a single, directly invocable entry point per install path, replacing the logic previously inlined in each installer.
+- **CI coverage for the signer check** — CI previously only ran `bash -n` over the installer, so the check itself was never executed; that is how the bug above shipped. CI now asserts both installers accept a genuine Developer ID-signed release binary and reject an ad-hoc signed one, and the release workflow gates publishing on the freshly signed binary passing the installers' own check.
+
 ## [1.0.3] — 2026-04-27
 
 Visual rebrand to align the product icon with the high5 ventures GmbH brand.

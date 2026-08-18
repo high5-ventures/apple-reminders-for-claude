@@ -12,8 +12,8 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pipeline } from "node:stream/promises";
-import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
+import { verifySignature } from "./verify-signature.js";
 
 if (process.platform !== "darwin") {
   console.warn(
@@ -31,24 +31,8 @@ const version = pkg.version;
 const binDir = resolve(here, "..", "bin");
 const target = resolve(binDir, "reminders-eventkit");
 const url = `https://github.com/high5-ventures/apple-reminders-for-claude/releases/download/v${version}/reminders-eventkit`;
-const expectedAuthority = /Authority=Developer ID Application: high5 ventures GmbH/;
 
 mkdirSync(binDir, { recursive: true });
-
-function verifySignature(path) {
-  const verify = spawnSync("codesign", ["--verify", "--verbose", path], {
-    encoding: "utf8",
-  });
-  if (verify.status !== 0) {
-    return { ok: false, reason: verify.stderr || verify.stdout };
-  }
-  const identity = spawnSync("codesign", ["-dv", path], { encoding: "utf8" });
-  const combined = (identity.stderr || "") + (identity.stdout || "");
-  if (!expectedAuthority.test(combined)) {
-    return { ok: false, reason: `unexpected signer:\n${combined}` };
-  }
-  return { ok: true };
-}
 
 // Re-verify the cached binary on every install so a tampered file doesn't
 // persist silently across upgrades. If verification fails, fall through to
@@ -91,7 +75,8 @@ try {
   const check = verifySignature(tmp);
   if (!check.ok) {
     throw new Error(
-      `codesign verification failed: ${check.reason}\nExpected signer: 'Developer ID Application: high5 ventures GmbH'`
+      `refusing to install unverified binary — expected a signature from ` +
+        `'Developer ID Application: high5 ventures GmbH'\n${check.reason}`
     );
   }
 

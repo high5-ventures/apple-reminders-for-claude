@@ -98,6 +98,11 @@ jobs:
           codesign --verify --verbose dist/reminders-eventkit
           spctl --assess --type execute --verbose dist/reminders-eventkit || true
           codesign -dv --entitlements :- dist/reminders-eventkit
+          # Gate the release on the installers' own signer check: if this
+          # binary would not be accepted by scripts/install-binary.sh or the
+          # npm postinstall, publishing it ships a broken install.
+          ./scripts/verify-signature.sh dist/reminders-eventkit
+          node npm-package/scripts/verify-signature.js dist/reminders-eventkit
 
       - name: Build .mcpb bundle
         run: ./build.sh mcpb

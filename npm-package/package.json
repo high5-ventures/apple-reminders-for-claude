@@ -12,6 +12,7 @@
     "server/",
     "bin/",
     "scripts/install-binary.js",
+    "scripts/verify-signature.js",
     "README.md",
     "LICENSE",
     "PRIVACY.md"
