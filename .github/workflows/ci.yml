@@ -163,12 +163,14 @@ jobs:
         run: |
           # The binary has no TCC grant here; it should still validate its
           # argv and exit with a JSON envelope rather than hang or crash.
+          # macOS ships no GNU `timeout`; perl's alarm survives exec and is
+          # always present. A fired alarm kills the child with SIGALRM -> 142.
           set +e
-          OUTPUT=$(timeout 120 ./dist/reminders-eventkit list-lists 2>&1)
+          OUTPUT=$(perl -e 'alarm 120; exec @ARGV' ./dist/reminders-eventkit list-lists 2>&1)
           EXIT=$?
           set -e
           echo "$OUTPUT"
-          if [[ $EXIT -eq 124 ]]; then
+          if [[ $EXIT -eq 142 ]]; then
             echo "KNOWN BUG: binary hung in the EventKit access request, killed after 120s" >&2
             exit 1
           fi
