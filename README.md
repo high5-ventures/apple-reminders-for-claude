@@ -171,7 +171,17 @@ Read the full policy: [PRIVACY.md](PRIVACY.md).
 
 ## Troubleshooting
 
-**"Reminders access denied"** — open **System Settings → Privacy & Security → Reminders** and enable access for Claude Desktop (or your MCP client). Then retry.
+**`PERMISSION_DENIED`** — you (or a device policy) turned Reminders access off. Re-enable it in **System Settings → Privacy & Security → Reminders**, then retry.
+
+**`PERMISSION_UNAVAILABLE`** — a different problem, and the one worth reading carefully: macOS refused the request *without ever showing a dialog*, so there is nothing to switch on and the privacy pane stays empty. Granting permissions or running `tccutil reset` cannot help — there is no entry to grant or reset.
+
+macOS attributes a privacy request to the *responsible* process, which for an MCP server is normally the application that launched it. If that application declares no Reminders usage description, the request is refused before it reaches EventKit. Since v1.0.4 the binary claims TCC responsibility for itself, so macOS reads the usage description from the binary and can prompt regardless of the host — if you still see this error, check which process macOS holds responsible:
+
+```shell
+log show --last 3m --predicate 'process == "tccd"' --info --debug | grep -i reminder
+```
+
+The `AttributionChain` line should name `reminders-eventkit` as `responsible`. If it names the host application instead, the self-attribution did not take effect — please include that log line when opening an issue.
 
 **Binary quarantined on first launch** — our releases are signed and notarized, so this should not happen. If it does, verify the signature:
 
