@@ -28,12 +28,22 @@ DIST="$REPO/dist"
 BINARY_SRC="$REPO/src/reminders-eventkit.swift"
 BINARY_OUT="$DIST/reminders-eventkit"
 ENTITLEMENTS="$REPO/src/entitlements.plist"
+INFO_PLIST="$REPO/src/Info.plist"
 
 build_binary() {
   echo "[build] compiling Swift binary → $BINARY_OUT"
   mkdir -p "$DIST"
-  /usr/bin/swiftc -O "$BINARY_SRC" -o "$BINARY_OUT"
+  # A bare executable has no bundle, so the Info.plist is linked into a
+  # __TEXT,__info_plist section. Without it macOS finds no usage description
+  # for the process and refuses Reminders access before EventKit is reached.
+  /usr/bin/swiftc -O "$BINARY_SRC" -o "$BINARY_OUT" \
+    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$INFO_PLIST"
   chmod +x "$BINARY_OUT"
+
+  if ! grep -q NSRemindersFullAccessUsageDescription "$BINARY_OUT"; then
+    echo "[build] embedded Info.plist missing from $BINARY_OUT — refusing to ship" >&2
+    exit 1
+  fi
 
   if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
     echo "[build] signing binary with $SIGNING_IDENTITY"

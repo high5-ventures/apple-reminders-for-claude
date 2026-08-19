@@ -145,33 +145,35 @@ jobs:
             exit 1
           fi
 
-      # KNOWN BROKEN — quarantined, deliberately not deleted.
-      #
-      # This step has never passed. On a headless runner the binary blocks
-      # indefinitely inside the EventKit access request, so the job burned its
-      # full 20-minute timeout and was cancelled — on every CI run since the
-      # workflow was introduced. Every step that used to follow it was skipped
-      # every time, which is why nothing caught the signer check that could
-      # never match (issues #2, #3).
-      #
-      # It now runs last, bounded, and non-blocking, so one broken step stops
-      # masking the rest of the suite. The hang is a real bug in the binary's
-      # access request and is tracked separately — do not delete this step to
-      # make CI green.
-      - name: Smoke-test binary (list-lists)
-        continue-on-error: true
+      - name: Binary carries the Reminders usage description
         run: |
-          # The binary has no TCC grant here; it should still validate its
-          # argv and exit with a JSON envelope rather than hang or crash.
+          # A bare executable has no bundle: without the linked
+          # __TEXT,__info_plist section macOS refuses Reminders access before
+          # EventKit is reached, with no dialog and no System Settings entry.
+          for key in NSRemindersUsageDescription NSRemindersFullAccessUsageDescription; do
+            grep -q "$key" dist/reminders-eventkit \
+              || { echo "$key missing from embedded Info.plist" >&2; exit 1; }
+          done
+
+      # Un-quarantined: this step used to hang forever inside the EventKit
+      # access request and cancel the whole job at its 20-minute timeout. The
+      # request is now bounded, so a runner without a TCC grant gets a prompt
+      # answer instead of a deadlock.
+      - name: Smoke-test binary (list-lists)
+        env:
+          REMINDERS_TCC_TIMEOUT_SECONDS: 5
+        run: |
+          # No TCC grant on a headless runner, so the expected outcome is a
+          # permission error — but it must arrive as a JSON envelope, quickly.
           # macOS ships no GNU `timeout`; perl's alarm survives exec and is
           # always present. A fired alarm kills the child with SIGALRM -> 142.
           set +e
-          OUTPUT=$(perl -e 'alarm 120; exec @ARGV' ./dist/reminders-eventkit list-lists 2>&1)
+          OUTPUT=$(perl -e 'alarm 60; exec @ARGV' ./dist/reminders-eventkit list-lists 2>&1)
           EXIT=$?
           set -e
           echo "$OUTPUT"
           if [[ $EXIT -eq 142 ]]; then
-            echo "KNOWN BUG: binary hung in the EventKit access request, killed after 120s" >&2
+            echo "Binary hung in the EventKit access request despite the bounded wait" >&2
             exit 1
           fi
           echo "$OUTPUT" | grep -Eq '"status":"(ok|error)"' \

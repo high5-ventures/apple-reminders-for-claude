@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Embedded into the binary's __TEXT,__info_plist section by build.sh.
+
+  A bare Mach-O executable has no bundle, so without this section macOS finds
+  no usage description for the process and tccd refuses the Reminders request
+  before EventKit is reached — no dialog, no entry in System Settings. Both
+  keys are required: tccd resolves the auth-specific key for a full-access
+  request but still refuses when the base key is absent.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>de.h5ventures.reminders-eventkit</string>
+    <key>CFBundleName</key>
+    <string>Apple Reminders for Claude</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>Apple Reminders for Claude reads and writes your reminders so Claude can list, search, create, and complete them on your behalf. Nothing leaves your Mac.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Apple Reminders for Claude reads and writes your reminders so Claude can list, search, create, and complete them on your behalf. Nothing leaves your Mac.</string>
+</dict>
+</plist>
