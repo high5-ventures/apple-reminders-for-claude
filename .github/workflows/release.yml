@@ -214,18 +214,18 @@ jobs:
       - name: Install mcp-publisher (pinned + checksum-verified)
         if: steps.version.outputs.publish == 'true'
         run: |
-          MCP_PUBLISHER_VERSION=v1.7.0
+          MCP_PUBLISHER_VERSION=v1.8.1
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
           ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
           ASSET="mcp-publisher_${OS}_${ARCH}.tar.gz"
 
-          # Hashes from the v1.7.0 release's checksums file. Update on bump.
+          # Hashes from registry_1.8.1_checksums.txt. Update on bump.
           # `case` instead of `declare -A` so this works on Bash 3.2 (macOS).
           case "${OS}_${ARCH}" in
-            darwin_arm64) EXPECTED=9bad6be86bcdda29d037c2af6e0fa635fd2709830ecefe2ece6fc2b81dcfe1f2 ;;
-            darwin_amd64) EXPECTED=7b0bf82c74453f39e4030c11fccfe9ea3019786982b473be6b4e0fdfac6c2ca4 ;;
-            linux_arm64)  EXPECTED=e4412248080b3646601724f672f3aad742d1043c8b7d98e8b0cf4162f37053f7 ;;
-            linux_amd64)  EXPECTED=5c61dd7dd33bbf00c9c0f569d3dc2f95bbbbfec0c6951a681a2dd573cb376851 ;;
+            darwin_arm64) EXPECTED=e45e520892460732a4bdf37255576415d4a53ec171f8b913faf15bb1aef7cb77 ;;
+            darwin_amd64) EXPECTED=88126981225e7714fcc6b7a10cdba4a80ae5901e9740a8c06d0d5195c8bc294c ;;
+            linux_arm64)  EXPECTED=8dd75a6cf6845688b5d4e46df58d3ca26d5c8d233bb0626606e1db82c5e883e4 ;;
+            linux_amd64)  EXPECTED=a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc ;;
             *) echo "no pinned checksum for ${OS}_${ARCH}" >&2; exit 1 ;;
           esac
 
