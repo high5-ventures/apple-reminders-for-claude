@@ -4,6 +4,10 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-08-21
+
+Repair release. Both installation paths outside Claude Desktop were broken from the moment v1.0.3 shipped, and Reminders access itself could not be granted in Claude Desktop at all. If you tried this connector and gave up, this is the version to retry.
+
 ### Fixed
 - **Reminders access was refused without ever showing a dialog** ([#1](https://github.com/high5-ventures/apple-reminders-for-claude/issues/1), [#2](https://github.com/high5-ventures/apple-reminders-for-claude/issues/2)) — macOS attributes a privacy request to the *responsible* process, which for an MCP server is the host application. Claude Desktop declares no Reminders usage description, so `tccd` refused the request before EventKit was reached: no prompt, no entry in System Settings, and `tccutil reset` powerless. The binary now claims TCC responsibility for itself by re-execing with `responsibility_spawnattrs_setdisclaim` (resolved via `dlsym`, degrading to the previous behaviour if a future macOS drops the symbol), carries both `NSRemindersUsageDescription` and `NSRemindersFullAccessUsageDescription` in a linked `__TEXT,__info_plist` section, and ships the `com.apple.security.personal-information.reminders` entitlement that macOS 26+ requires on hardened-runtime binaries. No packaging changes — every install path picks this up from the binary alone.
 - **Indefinite hang on an unanswerable access request** — `requestAccessOrExit` waited on a semaphore with no timeout, and a request macOS refuses outright can leave the completion handler unfired. The wait is now bounded (`REMINDERS_TCC_TIMEOUT_SECONDS`, default 120). This is the hang that cancelled every CI run at the 20-minute job timeout; the smoke test is un-quarantined.
