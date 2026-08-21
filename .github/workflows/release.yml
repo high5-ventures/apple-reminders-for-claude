@@ -68,7 +68,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
       - name: Install MCPB CLI
@@ -183,15 +183,32 @@ jobs:
           cd npm-package
           npm install --no-audit --no-fund --ignore-scripts
 
+      # Trusted publishing: npm authenticates against this workflow's OIDC
+      # identity (hence `id-token: write` above), so there is deliberately no
+      # NODE_AUTH_TOKEN here. The trust is configured on npmjs.com against this
+      # repository and this workflow filename; renaming this file breaks
+      # publishing until the configuration is updated to match.
       - name: Publish npm package
         if: steps.version.outputs.publish == 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # An npm older than 11.5.1 ignores OIDC and silently falls back to
+          # token auth, which then fails as an unrelated-looking 404. Assert the
+          # version instead of discovering that at publish time.
+          npm install -g npm@latest
+          REQUIRED=11.5.1
+          ACTUAL=$(npm --version)
+          if [[ "$(printf '%s\n%s\n' "$REQUIRED" "$ACTUAL" | sort -V | head -1)" != "$REQUIRED" ]]; then
+            echo "npm $ACTUAL cannot use trusted publishing (need >= $REQUIRED)" >&2
+            exit 1
+          fi
+          echo "publishing with npm $ACTUAL via OIDC"
+
           cd npm-package
           # The published tarball must NOT include the local binary — end users
           # download it via the postinstall script. Remove before pack.
           rm -f bin/reminders-eventkit
+          # Provenance is attested automatically under trusted publishing; no
+          # --provenance flag needed.
           npm publish --access public
 
       - name: Install mcp-publisher (pinned + checksum-verified)
