@@ -9,6 +9,10 @@ on:
       tag:
         description: 'Tag to release (e.g. v1.0.0)'
         required: true
+      publish:
+        description: 'Publish the release. Set to false for a signed, notarized test build that is uploaded as a workflow artifact only — nothing reaches GitHub Releases, npm, or the MCP Registry.'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -38,7 +42,19 @@ jobs:
           VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Releasing tag=$TAG version=$VERSION"
+
+          # Resolved here as a string rather than guarding steps on
+          # `inputs.publish` directly: in GitHub expressions an unset input is
+          # the empty string, and `'' == false` is true, so a tag push would
+          # silently skip publishing. A tag push always publishes; only an
+          # explicit dispatch with publish=false produces a test build.
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.publish }}" == "false" ]]; then
+            PUBLISH=false
+          else
+            PUBLISH=true
+          fi
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "Releasing tag=$TAG version=$VERSION publish=$PUBLISH"
 
       - name: Verify manifest versions match tag
         run: |
@@ -128,12 +144,27 @@ jobs:
           chmod +x /tmp/bin-extract
           codesign --verify --verbose /tmp/bin-extract
 
+      # Always uploaded, so a `publish=false` dispatch yields an installable
+      # signed + notarized bundle for testing without anything reaching
+      # GitHub Releases, npm, or the MCP Registry.
+      # actions/upload-artifact@v7.0.1
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: apple-reminders-${{ steps.version.outputs.tag }}
+          path: |
+            dist/apple-reminders.mcpb
+            dist/reminders-eventkit
+          if-no-files-found: error
+          retention-days: 14
+
       # GitHub Release MUST be created BEFORE the npm package is published.
       # The npm postinstall fetches the binary from this release URL; if npm
       # publishes first and the release step then fails, the npm version is
       # immutable and broken for fresh installs.
       # softprops/action-gh-release@v3.0.0
       - name: Create GitHub Release
+        if: steps.version.outputs.publish == 'true'
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
           tag_name: ${{ steps.version.outputs.tag }}
@@ -145,6 +176,7 @@ jobs:
             dist/reminders-eventkit
 
       - name: Stage npm-package with signed binary
+        if: steps.version.outputs.publish == 'true'
         run: |
           mkdir -p npm-package/bin
           cp dist/reminders-eventkit npm-package/bin/reminders-eventkit
@@ -152,6 +184,7 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts
 
       - name: Publish npm package
+        if: steps.version.outputs.publish == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -162,6 +195,7 @@ jobs:
           npm publish --access public
 
       - name: Install mcp-publisher (pinned + checksum-verified)
+        if: steps.version.outputs.publish == 'true'
         run: |
           MCP_PUBLISHER_VERSION=v1.7.0
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -187,6 +221,7 @@ jobs:
           chmod +x "$RUNNER_TEMP/mcp-publisher"
 
       - name: Publish to MCP Registry
+        if: steps.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
