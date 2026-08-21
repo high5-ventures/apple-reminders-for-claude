@@ -207,6 +207,17 @@ jobs:
           # The published tarball must NOT include the local binary — end users
           # download it via the postinstall script. Remove before pack.
           rm -f bin/reminders-eventkit
+
+          # npm versions are immutable, so re-running a release that got part
+          # way through must not fail here. Publishing is the step most likely
+          # to have already succeeded when a later one did not.
+          PKG=$(node -p 'require("./package.json").name')
+          VERSION=$(node -p 'require("./package.json").version')
+          if npm view "$PKG@$VERSION" version >/dev/null 2>&1; then
+            echo "$PKG@$VERSION is already published — skipping"
+            exit 0
+          fi
+
           # Provenance is attested automatically under trusted publishing; no
           # --provenance flag needed.
           npm publish --access public
