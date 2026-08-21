@@ -61,6 +61,7 @@
 
 import Foundation
 import EventKit
+import MachO
 
 // MARK: - JSON helpers ------------------------------------------------------
 
@@ -194,8 +195,17 @@ func reminderDict(_ r: EKReminder) -> [String: Any] {
 
 // MARK: - Store access ------------------------------------------------------
 
+/// How long to wait for macOS to answer an access request. A real dialog needs
+/// human reaction time, so the default is generous; CI and diagnostics can
+/// shorten it. Bounded because a request the OS refuses outright can leave the
+/// completion handler unfired, which used to hang the process indefinitely.
+let accessRequestTimeout: DispatchTimeInterval = {
+    let configured = ProcessInfo.processInfo.environment["REMINDERS_TCC_TIMEOUT_SECONDS"]
+    return .seconds(max(1, configured.flatMap(Int.init) ?? 120))
+}()
+
 /// Lazy, cached EKEventStore. Request access synchronously on first use.
-/// We exit with PERMISSION_DENIED if the user declines.
+/// We exit with a permission error if access cannot be obtained.
 final class Store {
     static let shared = Store()
     let store: EKEventStore
@@ -205,8 +215,28 @@ final class Store {
     }
 
     /// Request full access to reminders. Blocks until the user responds to
-    /// the system dialog (first run only).
+    /// the system dialog (first run only), or until `accessRequestTimeout`.
     func requestAccessOrExit() {
+        // A decision that has already been made cannot produce a dialog, so
+        // report it immediately instead of waiting for one that never comes.
+        switch EKEventStore.authorizationStatus(for: .reminder) {
+        case .restricted:
+            print(Json.err(
+                code: "PERMISSION_DENIED",
+                message: "Reminders access is restricted by a device policy."
+            ))
+            exit(1)
+        case .denied:
+            print(Json.err(
+                code: "PERMISSION_DENIED",
+                message: "Reminders access was denied. Re-enable it in "
+                    + "System Settings › Privacy & Security › Reminders."
+            ))
+            exit(1)
+        default:
+            break
+        }
+
         let sem = DispatchSemaphore(value: 0)
         var granted = false
         var failure: Error?
@@ -225,12 +255,40 @@ final class Store {
             }
         }
 
-        sem.wait()
+        // A request macOS refuses outright — because the responsible process
+        // declares no Reminders usage description — can leave this handler
+        // unfired forever, so the wait is bounded.
+        if sem.wait(timeout: .now() + accessRequestTimeout) == .timedOut {
+            print(Json.err(
+                code: "PERMISSION_UNAVAILABLE",
+                message: "macOS never answered the Reminders access request and no "
+                    + "dialog appeared. The host application this server runs under "
+                    + "cannot request Reminders access."
+            ))
+            exit(1)
+        }
 
         if !granted {
-            let msg = failure?.localizedDescription
-                ?? "User declined Reminders access."
-            print(Json.err(code: "PERMISSION_DENIED", message: msg))
+            // Distinguish "you said no" from "you were never asked" — the two
+            // need opposite remedies, and conflating them sends users chasing
+            // a System Settings entry or a `tccutil reset` that cannot help.
+            let message: String
+            if let failure = failure {
+                message = failure.localizedDescription
+            } else if EKEventStore.authorizationStatus(for: .reminder) == .denied {
+                message = "You declined Reminders access. Re-enable it in "
+                    + "System Settings › Privacy & Security › Reminders."
+            } else {
+                print(Json.err(
+                    code: "PERMISSION_UNAVAILABLE",
+                    message: "macOS refused the Reminders access request without showing "
+                        + "a dialog, and left no entry in System Settings. This happens "
+                        + "when the responsible process declares no Reminders usage "
+                        + "description; granting or resetting permissions cannot fix it."
+                ))
+                exit(1)
+            }
+            print(Json.err(code: "PERMISSION_DENIED", message: message))
             exit(1)
         }
     }
@@ -699,6 +757,62 @@ enum Command {
     }
 }
 
+// MARK: - TCC responsibility ------------------------------------------------
+
+/// Environment marker so the re-exec below happens exactly once.
+let disclaimGuardVariable = "REMINDERS_EVENTKIT_TCC_DISCLAIMED"
+
+/// Re-exec this process with TCC responsibility disclaimed.
+///
+/// macOS attributes a privacy request to the *responsible* process, which for
+/// a helper spawned by a GUI host is that host. Claude Desktop's bundle
+/// declares no Reminders usage string, so tccd refuses the request before
+/// EventKit is ever reached: no dialog, no entry in System Settings, and no
+/// way for the user to grant anything. `responsibility_spawnattrs_setdisclaim`
+/// makes the new process image its own responsible process, so macOS reads the
+/// usage strings from our embedded `__TEXT,__info_plist` instead of from the
+/// host's bundle. This is the same private libSystem call Chromium uses to
+/// make its helper processes self-responsible; it is resolved via `dlsym` so a
+/// future macOS that drops the symbol degrades to the old host-attributed
+/// behaviour rather than failing to launch.
+///
+/// `POSIX_SPAWN_SETEXEC` replaces the process image in place, so file
+/// descriptors, exit codes and signals need no proxying. That is also why this
+/// must run before any argument parsing or stdin handling: an unread stdin
+/// payload survives the exec untouched, but a consumed one would not.
+func reexecDisclaimingTCCResponsibility() {
+    guard ProcessInfo.processInfo.environment[disclaimGuardVariable] == nil else { return }
+
+    typealias SetDisclaim =
+        @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+    // RTLD_DEFAULT is a cast macro and therefore not imported into Swift.
+    guard let symbol = dlsym(
+        UnsafeMutableRawPointer(bitPattern: -2),
+        "responsibility_spawnattrs_setdisclaim"
+    ) else { return }
+    let setDisclaim = unsafeBitCast(symbol, to: SetDisclaim.self)
+
+    var executablePath = [CChar](repeating: 0, count: Int(PATH_MAX))
+    var pathSize = UInt32(executablePath.count)
+    guard _NSGetExecutablePath(&executablePath, &pathSize) == 0 else { return }
+
+    var attributes: posix_spawnattr_t?
+    guard posix_spawnattr_init(&attributes) == 0 else { return }
+    defer { posix_spawnattr_destroy(&attributes) }
+
+    guard posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETEXEC)) == 0,
+          setDisclaim(&attributes, 1) == 0
+    else { return }
+
+    setenv(disclaimGuardVariable, "1", 1)
+
+    // On success this does not return — the image is replaced. If it does
+    // return, the spawn failed; carry on undisclaimed rather than dying, so
+    // hosts that are already a valid responsible process keep working.
+    posix_spawn(nil, executablePath, nil, &attributes, CommandLine.unsafeArgv, environ)
+    unsetenv(disclaimGuardVariable)
+}
+
 // MARK: - Entry point -------------------------------------------------------
 
 func usage() -> String {
@@ -707,6 +821,8 @@ func usage() -> String {
         message: "Usage: reminders-eventkit <command> [args]. See source for command list."
     )
 }
+
+reexecDisclaimingTCCResponsibility()
 
 let args = CommandLine.arguments
 if args.count < 2 {
