@@ -194,8 +194,9 @@ The `AttributionChain` line should name `reminders-eventkit` as `responsible`. I
 **Binary quarantined on first launch** — our releases are signed and notarized, so this should not happen. If it does, verify the signature:
 
 ```shell
-codesign --verify --verbose /Applications/Claude.app/Contents/Resources/mcpb/apple-reminders/bin/reminders-eventkit
-spctl --assess --type execute /Applications/Claude.app/Contents/Resources/mcpb/apple-reminders/bin/reminders-eventkit
+BIN=~/Library/Application\ Support/Claude/Claude\ Extensions/local.mcpb.high5-ventures-gmbh.apple-reminders/bin/reminders-eventkit
+codesign --verify --verbose "$BIN"
+spctl --assess --type execute "$BIN"
 ```
 
 If either fails, you may have downloaded a tampered copy — re-download from the official [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) page.
