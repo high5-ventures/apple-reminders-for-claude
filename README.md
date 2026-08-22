@@ -7,7 +7,7 @@
 
 Fast, native Apple Reminders access for Claude — works in **Claude Desktop**, **Claude Cowork**, and **Claude Code** (CLI). One signed Swift/EventKit binary, three distribution packages.
 
-No AppleScript, no unstable positional IDs, no 30-second MCP timeouts. Sub-second latency on databases with hundreds of reminders. Full UTF-8 support for German umlauts, accents, CJK characters, and emoji.
+Reminder IDs are stable across sessions. A full CRUD round-trip takes under a second on a database with 300+ reminders. Umlauts, accents, CJK characters and emoji pass through unchanged.
 
 **Published by [high5 ventures GmbH](https://h5ventures.de)** — signed with `Developer ID Application: high5 ventures GmbH` and notarized by Apple.
 
@@ -21,13 +21,13 @@ You need a Mac running macOS 11 or later, and Claude Desktop.
 2. Double-click it. Claude Desktop opens an install dialog — click **Install**.
 3. Ask Claude something like **"What's on my reminders for today?"**
 
-macOS asks for Reminders access on that first question. Allow it, and you are done — Claude can now read and change your reminders.
+macOS asks for Reminders access on that first question. Allow it, and Claude can read and change your reminders.
 
-There is nothing to configure: no JSON to hand-edit, no config file to find, no API key, no path to set. The bundle carries the server and the signed binary, and Claude Desktop wires them up on install.
+No configuration is needed: the bundle contains the server and the signed binary, and Claude Desktop sets the paths on install.
 
-Updating later is the same three steps: download the newer `.mcpb`, double-click, install.
+Updating is the same three steps with the newer `.mcpb`.
 
-> Using something other than Claude Desktop? See [Installation](#installation) for Claude Code and other MCP clients.
+> Not using Claude Desktop? See [Installation](#installation) for Claude Code and other MCP clients.
 
 ---
 
@@ -57,7 +57,7 @@ Apple Reminders for Claude gives Claude full CRUD access to your macOS Reminders
 | **Claude Code** (CLI) | Plugin with skill | `/plugin marketplace add` against this repository |
 | **Any MCP client** | npm package | `npm install -g @high5ventures/apple-reminders-mcp` |
 
-All three paths share the same Swift binary and the same MCP protocol surface, so behavior is identical everywhere.
+All three ship the same binary and the same 13 tools, so behaviour does not differ between them.
 
 ## Features
 
@@ -66,13 +66,13 @@ All three paths share the same Swift binary and the same MCP protocol surface, s
 - **Stable UUIDs** — reminder IDs survive across sessions, unlike AppleScript URIs or CLI positional indexes.
 - **Tool safety annotations** — every tool declares `readOnlyHint` / `destructiveHint` so Claude clients can auto-run queries but prompt for mutations.
 - **Language-neutral** — the skill matches on intent, not keywords. Works identically in German, French, Spanish, Japanese, etc.
-- **Sub-second latency** — full CRUD smoke-test completes in under 1 s on a database with 300+ reminders across 10 lists.
-- **Signed + notarized** — no Gatekeeper warnings, MDM-deployable, enterprise-ready.
+- **Speed** — full CRUD smoke-test completes in under 1 s on 300+ reminders across 10 lists.
+- **Signed + notarized** — no Gatekeeper warnings; deployable via MDM.
 - **100% local** — no network I/O. See [PRIVACY.md](PRIVACY.md).
 
 ## Usage examples
 
-The skill loads automatically in Claude Code when you mention reminders. In Claude Desktop / Cowork, the tools appear under **Apple Reminders**. You talk to Claude naturally — these examples show what Claude does behind the scenes.
+In Claude Desktop and Cowork the tools appear under **Apple Reminders**; in Claude Code the skill loads when you mention reminders. The examples below show the tool calls behind each answer.
 
 ### Example 1 — "What's on my plate today?"
 
@@ -134,16 +134,13 @@ This is how the extension is installed. The two sections below cover other MCP c
 /plugin marketplace add high5-ventures/apple-reminders-for-claude
 ```
 
-Reload Claude Code before installing — the plugin only becomes visible once the
-newly added marketplace has been picked up.
+Reload Claude Code before the next step; the plugin is not visible until the marketplace has been picked up.
 
 ```shell
 /plugin install apple-reminders@high5-apple-reminders-for-claude
 ```
 
-More steps than the `.mcpb` double-click, and worth it for one reason: new
-versions are offered automatically from then on. You still have to look and
-confirm — nothing updates itself.
+This path offers new versions automatically, but does not install them; you still confirm each update.
 
 ### Any other MCP client (Cursor, Zed, …)
 
@@ -176,7 +173,7 @@ Or skip the global install and let the client fetch it on demand:
 }
 ```
 
-Where that configuration lives differs per client — see your client's documentation for the file path.
+The location of that file differs per client.
 
 ### Build from source
 
@@ -198,7 +195,7 @@ No configuration is required for normal use. The extension runs with these defau
 |---|---|---|
 | Reminders permission | prompted on first use | Revocable in **System Settings → Privacy & Security → Reminders** |
 | Binary timeout (Node wrapper) | 30 s | Hardcoded ceiling; well under any MCP client timeout |
-| Response payload cap | 16 MB | Plenty for databases with thousands of reminders |
+| Response payload cap | 16 MB | Covers databases with thousands of reminders |
 
 If you use the npm-distributed server with a non-standard MCP client, set `REMINDERS_BINARY` to the absolute path of the `reminders-eventkit` binary:
 
@@ -240,9 +237,9 @@ Read the full policy: [PRIVACY.md](PRIVACY.md).
 
 **`PERMISSION_DENIED`** — you (or a device policy) turned Reminders access off. Re-enable it in **System Settings → Privacy & Security → Reminders**, then retry.
 
-**`PERMISSION_UNAVAILABLE`** — a different problem, and the one worth reading carefully: macOS refused the request *without ever showing a dialog*, so there is nothing to switch on and the privacy pane stays empty. Granting permissions or running `tccutil reset` cannot help — there is no entry to grant or reset.
+**`PERMISSION_UNAVAILABLE`** — macOS refused the request without showing a dialog, so the privacy pane stays empty and there is nothing to switch on. Granting permissions or running `tccutil reset` does not help, because no entry exists to grant or reset.
 
-macOS attributes a privacy request to the *responsible* process, which for an MCP server is normally the application that launched it. If that application declares no Reminders usage description, the request is refused before it reaches EventKit. Since v1.0.4 the binary claims TCC responsibility for itself, so macOS reads the usage description from the binary and can prompt regardless of the host — if you still see this error, check which process macOS holds responsible:
+macOS attributes a privacy request to the process it holds *responsible*, normally the application that launched the server. If that application declares no Reminders usage description, the request is refused before it reaches EventKit. Since v1.0.4 the binary takes that responsibility itself, so the prompt no longer depends on the host. If the error persists, check the attribution:
 
 ```shell
 log show --last 3m --predicate 'process == "tccd"' --info --debug | grep -i reminder
@@ -250,7 +247,7 @@ log show --last 3m --predicate 'process == "tccd"' --info --debug | grep -i remi
 
 The `AttributionChain` line should name `reminders-eventkit` as `responsible`. If it names the host application instead, the self-attribution did not take effect — please include that log line when opening an issue.
 
-**Binary quarantined on first launch** — our releases are signed and notarized, so this should not happen. If it does, verify the signature:
+**Binary quarantined on first launch** — releases are signed and notarized, so this should not occur. To verify:
 
 ```shell
 BIN=~/Library/Application\ Support/Claude/Claude\ Extensions/local.mcpb.high5-ventures-gmbh.apple-reminders/bin/reminders-eventkit
@@ -258,7 +255,7 @@ codesign --verify --verbose "$BIN"
 spctl --assess --type execute "$BIN"
 ```
 
-If either fails, you may have downloaded a tampered copy — re-download from the official [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) page.
+If either fails, the copy may have been tampered with; re-download from [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases).
 
 **"List not found" or "Multiple lists with that name"** — reminder lists are matched by exact name. Use `get_lists` first to see available names. For duplicates, the error response includes a `candidates` array with stable `calendar_identifier`s; re-call with `id:<calendar_identifier>` as the list argument.
 
