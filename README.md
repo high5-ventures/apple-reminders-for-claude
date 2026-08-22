@@ -29,6 +29,22 @@ Updating later is the same three steps: download the newer `.mcpb`, double-click
 
 ---
 
+## Contents
+
+- [Description](#description)
+- [Features](#features)
+- [Usage examples](#usage-examples)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [MCP tools](#mcp-tools)
+- [Privacy policy](#privacy-policy)
+- [Troubleshooting](#troubleshooting)
+- [Support](#support)
+- [Architecture](#architecture)
+- [License](#license)
+
+---
+
 ## Description
 
 Apple Reminders for Claude gives Claude full CRUD access to your macOS Reminders app. It wraps Apple's native **EventKit** framework in a signed Swift binary that returns stable UUIDs and structured JSON, and ships three ways:
@@ -51,71 +67,6 @@ All three paths share the same Swift binary and the same MCP protocol surface, s
 - **Sub-second latency** — full CRUD smoke-test completes in under 1 s on a database with 300+ reminders across 10 lists.
 - **Signed + notarized** — no Gatekeeper warnings, MDM-deployable, enterprise-ready.
 - **100% local** — no network I/O. See [PRIVACY.md](PRIVACY.md).
-
-## Installation
-
-### Claude Desktop / Cowork
-
-Download `apple-reminders.mcpb` from [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) and double-click it. Claude Desktop shows an install dialog; click **Install**, then grant Reminders access in the macOS privacy prompt on the first tool call.
-
-**Updating works exactly the same way** — download the newer `.mcpb` and double-click it.
-
-This is how the extension is installed. The two sections below cover other MCP clients; on a Mac with Claude Desktop you do not need them.
-
-### Claude Code (CLI)
-
-```shell
-/plugin marketplace add high5-ventures/apple-reminders-for-claude
-```
-
-Reload Claude Code before installing — the plugin only becomes visible once the
-newly added marketplace has been picked up.
-
-```shell
-/plugin install apple-reminders@high5-apple-reminders-for-claude
-```
-
-More steps than the `.mcpb` double-click, and worth it for one reason: new
-versions are offered automatically from then on. You still have to look and
-confirm — nothing updates itself.
-
-### Any other MCP client (Cursor, Zed, …)
-
-```shell
-npm install -g @high5ventures/apple-reminders-mcp
-```
-
-Then point your client at `@high5ventures/apple-reminders-mcp` as a stdio MCP server. See your client's documentation for configuration specifics.
-
-### Build from source
-
-```shell
-git clone https://github.com/high5-ventures/apple-reminders-for-claude.git
-cd apple-reminders-for-claude
-./build.sh
-```
-
-Produces `dist/reminders-eventkit` (binary), `dist/skill/` (Claude Code skill), and `dist/apple-reminders.mcpb` (Claude Desktop bundle). Builds are unsigned; see [CONTRIBUTING.md](CONTRIBUTING.md) for the signed release workflow.
-
-Requirements for building: macOS 11+, Xcode Command Line Tools, Node.js 18+.
-
-## Configuration
-
-No configuration is required for normal use. The extension runs with these defaults:
-
-| Setting | Default | Notes |
-|---|---|---|
-| Reminders permission | prompted on first use | Revocable in **System Settings → Privacy & Security → Reminders** |
-| Binary timeout (Node wrapper) | 30 s | Hardcoded ceiling; well under any MCP client timeout |
-| Response payload cap | 16 MB | Plenty for databases with thousands of reminders |
-
-If you use the npm-distributed server with a non-standard MCP client, set `REMINDERS_BINARY` to the absolute path of the `reminders-eventkit` binary:
-
-```shell
-export REMINDERS_BINARY=/absolute/path/to/reminders-eventkit
-```
-
-The `.mcpb` and Claude Code plugin installations set this variable automatically.
 
 ## Usage examples
 
@@ -164,6 +115,96 @@ The skill loads automatically in Claude Code when you mention reminders. In Clau
 > { "status": "ok", "data": { "reminder": { "id": "G7H8…", "completed": true, "completion_date": "2026-04-14T18:22:01" } } }
 > ```
 > **Claude:** Two overdue items: Slack reply (now marked done) and PR #482 review (still open).
+
+## Installation
+
+### Claude Desktop / Cowork
+
+Download `apple-reminders.mcpb` from [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) and double-click it. Claude Desktop shows an install dialog; click **Install**, then grant Reminders access in the macOS privacy prompt on the first tool call.
+
+**Updating works exactly the same way** — download the newer `.mcpb` and double-click it.
+
+This is how the extension is installed. The two sections below cover other MCP clients; on a Mac with Claude Desktop you do not need them.
+
+### Claude Code (CLI)
+
+```shell
+/plugin marketplace add high5-ventures/apple-reminders-for-claude
+```
+
+Reload Claude Code before installing — the plugin only becomes visible once the
+newly added marketplace has been picked up.
+
+```shell
+/plugin install apple-reminders@high5-apple-reminders-for-claude
+```
+
+More steps than the `.mcpb` double-click, and worth it for one reason: new
+versions are offered automatically from then on. You still have to look and
+confirm — nothing updates itself.
+
+### Any other MCP client (Cursor, Zed, …)
+
+```shell
+npm install -g @high5ventures/apple-reminders-mcp
+```
+
+Then add it to your client's MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "apple-reminders": {
+      "command": "apple-reminders-mcp"
+    }
+  }
+}
+```
+
+Or skip the global install and let the client fetch it on demand:
+
+```json
+{
+  "mcpServers": {
+    "apple-reminders": {
+      "command": "npx",
+      "args": ["-y", "@high5ventures/apple-reminders-mcp"]
+    }
+  }
+}
+```
+
+Where that configuration lives differs per client — see your client's documentation for the file path.
+
+### Build from source
+
+```shell
+git clone https://github.com/high5-ventures/apple-reminders-for-claude.git
+cd apple-reminders-for-claude
+./build.sh
+```
+
+Produces `dist/reminders-eventkit` (binary), `dist/skill/` (Claude Code skill), and `dist/apple-reminders.mcpb` (Claude Desktop bundle). Builds are unsigned; see [CONTRIBUTING.md](CONTRIBUTING.md) for the signed release workflow.
+
+Requirements for building: macOS 11+, Xcode Command Line Tools, Node.js 18+.
+
+## Configuration
+
+No configuration is required for normal use. The extension runs with these defaults:
+
+| Setting | Default | Notes |
+|---|---|---|
+| Reminders permission | prompted on first use | Revocable in **System Settings → Privacy & Security → Reminders** |
+| Binary timeout (Node wrapper) | 30 s | Hardcoded ceiling; well under any MCP client timeout |
+| Response payload cap | 16 MB | Plenty for databases with thousands of reminders |
+
+If you use the npm-distributed server with a non-standard MCP client, set `REMINDERS_BINARY` to the absolute path of the `reminders-eventkit` binary:
+
+```shell
+export REMINDERS_BINARY=/absolute/path/to/reminders-eventkit
+```
+
+The `.mcpb` and Claude Code plugin installations set this variable automatically.
 
 ## MCP tools
 
