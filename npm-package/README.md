@@ -21,7 +21,7 @@ macOS 11+ only. The `os` field in `package.json` is set to `darwin`, so `npm ins
 ## Distribution alternatives
 
 - **Claude Desktop / Cowork** — use the signed `.mcpb` from [GitHub Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases).
-- **Claude Code** — install via the [official plugin directory](https://claude.com/plugins).
+- **Claude Code** — `/plugin marketplace add high5-ventures/apple-reminders-for-claude`, then `/plugin install apple-reminders@high5-apple-reminders-for-claude`.
 
 See the main [project README](https://github.com/high5-ventures/apple-reminders-for-claude#readme) for the full picture.
 
