@@ -49,7 +49,7 @@ skills/apple-reminders/ Claude Code skill (AppleScript fallback for flagged)
 ├── SKILL.md            Skill definition + protocol docs
 ├── lib/                Shared AppleScript helpers
 └── scripts/            AppleScript fallback scripts
-.claude-plugin/         Claude Code Plugin Directory manifest
+.claude-plugin/         Claude Code plugin + marketplace manifests
 hooks/                  Plugin SessionStart hook (downloads binary)
 scripts/                install-binary.sh + notarize.sh
 build.sh                Orchestrator — binary / skill / mcpb / clean / all
@@ -92,7 +92,7 @@ cd npm-package && npm ci --ignore-scripts \
 ~/.local/bin/mcpb validate mcpb/manifest.json           # validate manifest
 ```
 
-For the MCP Plugin Directory manifest:
+For the MCP Registry manifest:
 
 ```bash
 # Ensure .claude-plugin/plugin.json exists and is valid JSON

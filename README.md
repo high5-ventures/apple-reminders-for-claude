@@ -17,11 +17,11 @@ No AppleScript, no unstable positional IDs, no 30-second MCP timeouts. Sub-secon
 
 Apple Reminders for Claude gives Claude full CRUD access to your macOS Reminders app. It wraps Apple's native **EventKit** framework in a signed Swift binary that returns stable UUIDs and structured JSON, and ships three ways:
 
-| Target | Artifact | Distribution |
+| Target | Artifact | Where to get it |
 |---|---|---|
-| **Claude Desktop / Cowork** | `.mcpb` bundle | Anthropic Desktop Extensions Directory |
-| **Claude Code** (CLI) | Plugin with skill | Claude Code Plugin Directory |
-| **Any MCP client** | npm package | MCP Registry (`io.github.high5-ventures/apple-reminders`) |
+| **Claude Desktop / Cowork** | `.mcpb` bundle | [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) |
+| **Claude Code** (CLI) | Plugin with skill | `/plugin marketplace add` against this repository |
+| **Any MCP client** | npm package | `npm install -g @high5ventures/apple-reminders-mcp` |
 
 All three paths share the same Swift binary and the same MCP protocol surface, so behavior is identical everywhere.
 
@@ -38,24 +38,22 @@ All three paths share the same Swift binary and the same MCP protocol surface, s
 
 ## Installation
 
-### Option 1 — Claude Desktop / Cowork (recommended for most users)
+### Claude Desktop / Cowork
 
-Install from the **Anthropic Desktop Extensions Directory** (in-app search) or download the latest signed `.mcpb` from [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) and double-click it. Claude Desktop shows an install dialog; click **Install**, then on the first tool call, grant Reminders access in the macOS privacy prompt.
+Download `apple-reminders.mcpb` from [Releases](https://github.com/high5-ventures/apple-reminders-for-claude/releases) and double-click it. Claude Desktop shows an install dialog; click **Install**, then grant Reminders access in the macOS privacy prompt on the first tool call.
 
-### Option 2 — Claude Code CLI
+**Updating works exactly the same way** — download the newer `.mcpb` and double-click it.
 
-```shell
-/plugin install apple-reminders@claude-plugins-official
-```
+This is how the extension is installed. The two sections below cover other MCP clients; on a Mac with Claude Desktop you do not need them.
 
-…or add the high5 ventures marketplace directly from GitHub:
+### Claude Code (CLI)
 
 ```shell
 /plugin marketplace add high5-ventures/apple-reminders-for-claude
 /plugin install apple-reminders@high5-apple-reminders-for-claude
 ```
 
-### Option 3 — Any MCP-compatible client (Cursor, Zed, etc.)
+### Any other MCP client (Cursor, Zed, …)
 
 ```shell
 npm install -g @high5ventures/apple-reminders-mcp
@@ -91,7 +89,7 @@ If you use the npm-distributed server with a non-standard MCP client, set `REMIN
 export REMINDERS_BINARY=/absolute/path/to/reminders-eventkit
 ```
 
-The `.mcpb` and Plugin Directory installations set this variable automatically.
+The `.mcpb` and Claude Code plugin installations set this variable automatically.
 
 ## Usage examples
 

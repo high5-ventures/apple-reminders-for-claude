@@ -6,8 +6,8 @@ Fast, native Apple Reminders access for Claude — signed with `Developer ID App
 
 | Target | How |
 |---|---|
-| **Claude Desktop / Cowork** | Download `apple-reminders.mcpb` below and double-click, or install from the Anthropic Extensions Directory. |
-| **Claude Code CLI** | `/plugin install apple-reminders@claude-plugins-official` |
+| **Claude Desktop / Cowork** | Download `apple-reminders.mcpb` below and double-click. Same for updating. |
+| **Claude Code CLI** | `/plugin marketplace add high5-ventures/apple-reminders-for-claude` |
 | **Any MCP client (Cursor, Zed, …)** | `npm install -g @high5ventures/apple-reminders-mcp` |
 
 ### Verify signature
