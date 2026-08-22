@@ -50,8 +50,18 @@ This is how the extension is installed. The two sections below cover other MCP c
 
 ```shell
 /plugin marketplace add high5-ventures/apple-reminders-for-claude
+```
+
+Reload Claude Code before installing — the plugin only becomes visible once the
+newly added marketplace has been picked up.
+
+```shell
 /plugin install apple-reminders@high5-apple-reminders-for-claude
 ```
+
+More steps than the `.mcpb` double-click, and worth it for one reason: new
+versions are offered automatically from then on. You still have to look and
+confirm — nothing updates itself.
 
 ### Any other MCP client (Cursor, Zed, …)
 
