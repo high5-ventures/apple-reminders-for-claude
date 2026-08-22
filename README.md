@@ -13,6 +13,22 @@ No AppleScript, no unstable positional IDs, no 30-second MCP timeouts. Sub-secon
 
 ---
 
+## Quick start
+
+You need a Mac running macOS 11 or later, and Claude Desktop.
+
+1. Download **`apple-reminders.mcpb`** from the [latest release](https://github.com/high5-ventures/apple-reminders-for-claude/releases/latest).
+2. Double-click it. Claude Desktop opens an install dialog — click **Install**.
+3. Ask Claude something like **"What's on my reminders for today?"**
+
+macOS asks for Reminders access on that first question. Allow it, and you are done — Claude can now read and change your reminders.
+
+Updating later is the same three steps: download the newer `.mcpb`, double-click, install.
+
+> Using something other than Claude Desktop? See [Installation](#installation) for Claude Code and other MCP clients.
+
+---
+
 ## Description
 
 Apple Reminders for Claude gives Claude full CRUD access to your macOS Reminders app. It wraps Apple's native **EventKit** framework in a signed Swift binary that returns stable UUIDs and structured JSON, and ships three ways:
@@ -81,7 +97,7 @@ cd apple-reminders-for-claude
 
 Produces `dist/reminders-eventkit` (binary), `dist/skill/` (Claude Code skill), and `dist/apple-reminders.mcpb` (Claude Desktop bundle). Builds are unsigned; see [CONTRIBUTING.md](CONTRIBUTING.md) for the signed release workflow.
 
-Requirements: macOS 11+, Xcode Command Line Tools, Node.js 18+.
+Requirements for building: macOS 11+, Xcode Command Line Tools, Node.js 18+.
 
 ## Configuration
 
@@ -139,8 +155,8 @@ The skill loads automatically in Claude Code when you mention reminders. In Clau
 > **Claude** (invokes `get_overdue`):
 > ```json
 > { "status": "ok", "data": { "reminders": [
->   { "id": "G7H8…", "name": "Reply to Alex in Slack DM", "list": "Arbeit", "due_date": "2026-04-12T17:00:00" },
->   { "id": "I9J0…", "name": "Review PR #482", "list": "Arbeit", "due_date": "2026-04-13T12:00:00" }
+>   { "id": "G7H8…", "name": "Reply to Alex in Slack DM", "list": "Work", "due_date": "2026-04-12T17:00:00" },
+>   { "id": "I9J0…", "name": "Review PR #482", "list": "Work", "due_date": "2026-04-13T12:00:00" }
 > ] } }
 > ```
 > **Claude** (invokes `complete_reminder` with `id: "G7H8…"`):
