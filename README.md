@@ -23,6 +23,8 @@ You need a Mac running macOS 11 or later, and Claude Desktop.
 
 macOS asks for Reminders access on that first question. Allow it, and you are done — Claude can now read and change your reminders.
 
+There is nothing to configure: no JSON to hand-edit, no config file to find, no API key, no path to set. The bundle carries the server and the signed binary, and Claude Desktop wires them up on install.
+
 Updating later is the same three steps: download the newer `.mcpb`, double-click, install.
 
 > Using something other than Claude Desktop? See [Installation](#installation) for Claude Code and other MCP clients.
