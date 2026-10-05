@@ -99,6 +99,19 @@ For the MCP Registry manifest:
 node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/plugin.json"))'
 ```
 
+## Continuous integration
+
+Runner time is spent where it pays off, so CI has two tiers:
+
+- **Every pull request** runs `ci.yml`: light checks on Linux, with no Swift build. It lints and cross-checks the manifests, parses the JavaScript and shell scripts, packs the npm tarball, and lists the server's tools over MCP. It only starts when a PR touches files those checks read.
+- **Everything that builds the binary** lives in `build.yml` (macOS: universal build, signer checks, smoke tests on both architectures). It never runs on its own. `ci-batch.yml` runs it together with the light checks, by hand against `main` once several merges have landed, and only after a maintainer has approved the run:
+
+  ```bash
+  gh workflow run ci-batch.yml --ref main
+  ```
+
+  A red batch run means fix or revert before more merges land. Releases are cut only from a `main` commit whose batch run is green. To try a risky change before merging, dispatch the batch against its branch instead of `main`.
+
 ## Commit style
 
 - One commit per logical change.

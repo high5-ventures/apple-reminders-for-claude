@@ -1,19 +1,35 @@
 name: CI
 
+# Light checks only: Linux, no Swift build. Everything that compiles the
+# binary or needs macOS lives in build.yml, which runs through ci-batch.yml
+# after merges instead of on every pull request (#20).
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
+    paths:
+      - ".claude-plugin/**"
+      - ".github/workflows/**"
+      - "build.sh"
+      - "hooks/**"
+      - "mcpb/**"
+      - "npm-package/**"
+      - "scripts/**"
+  workflow_call:
 
 permissions:
   contents: read
 
+concurrency:
+  # A literal prefix rather than github.workflow, which inside a called
+  # workflow resolves to the caller's name.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
-    name: Build + validate (unsigned)
-    runs-on: macos-14
-    timeout-minutes: 20
+    name: Lint + validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       # actions/checkout@v6.0.2
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -55,13 +71,24 @@ jobs:
       - name: Validate mcpb manifest
         run: mcpb validate mcpb/manifest.json || mcpb validate mcpb
 
-      - name: Build unsigned binary + skill + mcpb
-        run: ./build.sh
+      - name: JavaScript parses
+        run: |
+          for f in npm-package/server/index.js npm-package/bin/*.js npm-package/scripts/*.js; do
+            node --check "$f"
+          done
+
+      - name: Shell scripts parse
+        run: |
+          for f in build.sh scripts/*.sh; do
+            bash -n "$f"
+          done
 
       - name: Verify npm package builds
         run: |
           cd npm-package
-          npm install --no-audit --no-fund --ignore-scripts
+          # --force only gets past `"os": ["darwin"]` on this Linux runner; the
+          # lockfile still pins every version.
+          npm ci --no-audit --no-fund --ignore-scripts --force
           # Don't actually publish; just verify the tarball packs.
           npm pack --dry-run
           # Every module the postinstall imports must be in `files`, or the
@@ -81,29 +108,45 @@ jobs:
             }
           '
 
-      - name: Verify hooks/install-binary.sh is valid bash
+      # Talks MCP to the real server: the tools it serves must match the ones
+      # mcpb/manifest.json declares, and every parameter needs a description
+      # for the model to go on (#19). Listing tools never runs the binary.
+      - name: Server lists every tool with documented parameters
+        working-directory: npm-package
+        env:
+          REMINDERS_BINARY: /usr/bin/false
         run: |
-          bash -n scripts/install-binary.sh
-          bash -n scripts/notarize.sh
-          bash -n scripts/verify-signature.sh
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+            import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-      # The signer check is the one install step an unsigned CI build cannot
-      # exercise — and getting it wrong bricks every single install (issues
-      # #2, #3, where `codesign -dv` never prints the `Authority=` line the
-      # old check grepped for). Pin a known-good, Developer ID-signed release
-      # asset and assert both installers accept it. A negative test alone
-      # would not catch this: a malformed requirement makes codesign reject
-      # everything, so only a positive case proves the check still passes
-      # genuine binaries.
-      - name: Signer check accepts a genuine signed binary
-        run: |
-          REF=v1.0.3   # any published release works; pinned so CI does not
-                       # depend on the version currently under development
-          curl --fail --silent --location --output "$RUNNER_TEMP/ref-binary" \
-            "https://github.com/high5-ventures/apple-reminders-for-claude/releases/download/$REF/reminders-eventkit"
-          chmod +x "$RUNNER_TEMP/ref-binary"
-          ./scripts/verify-signature.sh "$RUNNER_TEMP/ref-binary"
-          node npm-package/scripts/verify-signature.js "$RUNNER_TEMP/ref-binary"
+            const client = new Client({ name: "ci", version: "0" });
+            await client.connect(new StdioClientTransport({
+              command: process.execPath,
+              args: ["server/index.js"],
+              env: { ...process.env },
+            }));
+            const { tools } = await client.listTools();
+            await client.close();
+
+            const manifest = JSON.parse(readFileSync("../mcpb/manifest.json", "utf8"));
+            const served = tools.map((t) => t.name).sort().join(" ");
+            const declared = manifest.tools.map((t) => t.name).sort().join(" ");
+            if (served !== declared) {
+              console.error(`server tools differ from mcpb/manifest.json:\n  served:   ${served}\n  manifest: ${declared}`);
+              process.exit(1);
+            }
+            const undocumented = tools.flatMap((t) =>
+              Object.entries(t.inputSchema.properties ?? {})
+                .filter(([, p]) => !p.description)
+                .map(([name]) => `${t.name}.${name}`));
+            if (undocumented.length) {
+              console.error(`parameters without a description: ${undocumented.join(", ")}`);
+              process.exit(1);
+            }
+            console.log(`${tools.length} tools, all parameters documented`);
+          '
 
       - name: Signer requirement is identical across both install paths
         run: |
@@ -122,21 +165,6 @@ jobs:
             exit 1
           fi
 
-      - name: Signer check rejects a foreign signature
-        run: |
-          # Ad-hoc signed: the signature is intact, but it is not ours. Both
-          # installers must refuse it.
-          cp dist/reminders-eventkit "$RUNNER_TEMP/adhoc-binary"
-          codesign --force --sign - "$RUNNER_TEMP/adhoc-binary"
-          if ./scripts/verify-signature.sh "$RUNNER_TEMP/adhoc-binary" 2>/dev/null; then
-            echo "verify-signature.sh accepted an ad-hoc signed binary" >&2
-            exit 1
-          fi
-          if node npm-package/scripts/verify-signature.js "$RUNNER_TEMP/adhoc-binary" 2>/dev/null; then
-            echo "verify-signature.js accepted an ad-hoc signed binary" >&2
-            exit 1
-          fi
-
       - name: Check no duplicated server source
         run: |
           # mcpb/server must NOT exist — server code lives only in npm-package/.
@@ -144,37 +172,3 @@ jobs:
             echo "mcpb/server/ should not exist — single-source-of-truth is npm-package/server/" >&2
             exit 1
           fi
-
-      - name: Binary carries the Reminders usage description
-        run: |
-          # A bare executable has no bundle: without the linked
-          # __TEXT,__info_plist section macOS refuses Reminders access before
-          # EventKit is reached, with no dialog and no System Settings entry.
-          for key in NSRemindersUsageDescription NSRemindersFullAccessUsageDescription; do
-            grep -q "$key" dist/reminders-eventkit \
-              || { echo "$key missing from embedded Info.plist" >&2; exit 1; }
-          done
-
-      # Un-quarantined: this step used to hang forever inside the EventKit
-      # access request and cancel the whole job at its 20-minute timeout. The
-      # request is now bounded, so a runner without a TCC grant gets a prompt
-      # answer instead of a deadlock.
-      - name: Smoke-test binary (list-lists)
-        env:
-          REMINDERS_TCC_TIMEOUT_SECONDS: 5
-        run: |
-          # No TCC grant on a headless runner, so the expected outcome is a
-          # permission error — but it must arrive as a JSON envelope, quickly.
-          # macOS ships no GNU `timeout`; perl's alarm survives exec and is
-          # always present. A fired alarm kills the child with SIGALRM -> 142.
-          set +e
-          OUTPUT=$(perl -e 'alarm 60; exec @ARGV' ./dist/reminders-eventkit list-lists 2>&1)
-          EXIT=$?
-          set -e
-          echo "$OUTPUT"
-          if [[ $EXIT -eq 142 ]]; then
-            echo "Binary hung in the EventKit access request despite the bounded wait" >&2
-            exit 1
-          fi
-          echo "$OUTPUT" | grep -Eq '"status":"(ok|error)"' \
-            || { echo "Binary did not emit JSON envelope"; exit 1; }
