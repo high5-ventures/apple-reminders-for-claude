@@ -235,7 +235,7 @@ Read the full policy: [PRIVACY.md](PRIVACY.md).
 
 ## Troubleshooting
 
-**`Binary crashed (exit 1): spawn Unknown system error -86`** — the binary was built for a different Mac. Releases up to and including v1.0.4 contain only an Apple Silicon binary that also requires macOS 14; later releases are universal and run on Apple Silicon and Intel from macOS 11. Update to the latest release.
+**`Binary crashed (exit 1): spawn Unknown system error -86`** — the binary was built for a different Mac. Releases up to and including v1.0.4 contain only an Apple Silicon binary that also requires macOS 14; from v1.0.5 the binary is universal and runs on Apple Silicon and Intel from macOS 11. Update to the latest release.
 
 **`PERMISSION_DENIED`** — you (or a device policy) turned Reminders access off. Re-enable it in **System Settings → Privacy & Security → Reminders**, then retry.
 
