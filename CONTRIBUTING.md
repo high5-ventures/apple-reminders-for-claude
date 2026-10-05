@@ -26,7 +26,7 @@ cd apple-reminders-for-claude
 
 The unified build produces:
 
-- `dist/reminders-eventkit` — unsigned Swift binary for local dev
+- `dist/reminders-eventkit` — unsigned universal Swift binary (arm64 + x86_64, macOS 11+) for local dev; `ARCHS=arm64 ./build.sh` builds a single architecture
 - `dist/skill/` — skill directory for Claude Code (copy to `~/.claude/skills/apple-reminders/`)
 - `dist/apple-reminders.mcpb` — unsigned bundle for Claude Desktop
 
@@ -125,7 +125,7 @@ git push origin v1.1.0
 
 The `.github/workflows/release.yml` workflow then:
 
-1. Builds the Swift binary on `macos-latest`
+1. Builds the universal Swift binary (arm64 + x86_64) on `macos-14` and refuses to publish one that lacks either slice
 2. Imports the `Developer ID Application: high5 ventures GmbH` certificate from `APPLE_CERTIFICATE_P12_BASE64`
 3. Signs the binary with Hardened Runtime
 4. Packs the `.mcpb`

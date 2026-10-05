@@ -15,7 +15,7 @@ Reminder IDs are stable across sessions. A full CRUD round-trip takes under a se
 
 ## Quick start
 
-You need a Mac running macOS 11 or later, and Claude Desktop.
+You need a Mac (Apple Silicon or Intel) running macOS 11 or later, and Claude Desktop.
 
 1. Download **`apple-reminders.mcpb`** from the [latest release](https://github.com/high5-ventures/apple-reminders-for-claude/releases/latest).
 2. Double-click it. Claude Desktop opens an install dialog — click **Install**.
@@ -183,9 +183,9 @@ cd apple-reminders-for-claude
 ./build.sh
 ```
 
-Produces `dist/reminders-eventkit` (binary), `dist/skill/` (Claude Code skill), and `dist/apple-reminders.mcpb` (Claude Desktop bundle). Builds are unsigned; see [CONTRIBUTING.md](CONTRIBUTING.md) for the signed release workflow.
+Produces `dist/reminders-eventkit` (universal binary for Apple Silicon and Intel), `dist/skill/` (Claude Code skill), and `dist/apple-reminders.mcpb` (Claude Desktop bundle). Builds are unsigned; see [CONTRIBUTING.md](CONTRIBUTING.md) for the signed release workflow.
 
-Requirements for building: macOS 11+, Xcode Command Line Tools, Node.js 18+.
+Requirements for building: macOS 11+, Xcode Command Line Tools, Node.js 18+. Toolchains older than Xcode 15 also work; they compile without the macOS 14 permission API and fall back to the older request. To build only your own architecture, set `ARCHS`, e.g. `ARCHS=x86_64 ./build.sh`.
 
 ## Configuration
 
@@ -234,6 +234,8 @@ This extension is **100% local at runtime** — no data leaves your Mac via this
 Read the full policy: [PRIVACY.md](PRIVACY.md).
 
 ## Troubleshooting
+
+**`Binary crashed (exit 1): spawn Unknown system error -86`** — the binary was built for a different Mac. Releases up to and including v1.0.4 contain only an Apple Silicon binary that also requires macOS 14; later releases are universal and run on Apple Silicon and Intel from macOS 11. Update to the latest release.
 
 **`PERMISSION_DENIED`** — you (or a device policy) turned Reminders access off. Re-enable it in **System Settings → Privacy & Security → Reminders**, then retry.
 

@@ -109,6 +109,17 @@ jobs:
       - name: Build signed Swift binary
         run: ./build.sh binary
 
+      # build.sh honours an ARCHS override; a release must still carry both
+      # slices, or Intel Macs fail to launch it with EBADARCH (#21).
+      - name: Verify binary is universal
+        run: |
+          ARCHS=$(lipo -archs dist/reminders-eventkit)
+          echo "architectures: $ARCHS"
+          for arch in arm64 x86_64; do
+            [[ " $ARCHS " == *" $arch "* ]] \
+              || { echo "release binary lacks the $arch slice" >&2; exit 1; }
+          done
+
       - name: Verify binary signature
         run: |
           codesign --verify --verbose dist/reminders-eventkit

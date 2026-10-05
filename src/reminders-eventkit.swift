@@ -9,7 +9,11 @@
 // AppleScript (EventKit is indexed, AppleScript scans linearly).
 //
 // Build:
-//   swiftc -O reminders-eventkit.swift -o reminders-eventkit
+//   ./build.sh binary
+//
+// A bare `swiftc` call is not enough: build.sh pins the deployment target,
+// builds arm64 and x86_64 into one universal binary, and links the Info.plist
+// that macOS needs before it will grant Reminders access.
 //
 // Usage:
 //   reminders-eventkit <command> [args...]
@@ -241,20 +245,25 @@ final class Store {
         let sem = DispatchSemaphore(value: 0)
         var granted = false
         var failure: Error?
-
-        if #available(macOS 14.0, *) {
-            store.requestFullAccessToReminders { ok, err in
-                granted = ok
-                failure = err
-                sem.signal()
-            }
-        } else {
-            store.requestAccess(to: .reminder) { ok, err in
-                granted = ok
-                failure = err
-                sem.signal()
-            }
+        let completion: EKEventStoreRequestAccessCompletionHandler = { ok, err in
+            granted = ok
+            failure = err
+            sem.signal()
         }
+
+        // `#available` is a runtime check: the compiler still needs the macOS 14
+        // symbol in its SDK. Swift 5.9 ships with Xcode 15, the first toolchain
+        // carrying the macOS 14 SDK, so older toolchains (e.g. on macOS 13)
+        // compile only the fallback instead of failing the build.
+        #if compiler(>=5.9)
+        if #available(macOS 14.0, *) {
+            store.requestFullAccessToReminders(completion: completion)
+        } else {
+            store.requestAccess(to: .reminder, completion: completion)
+        }
+        #else
+        store.requestAccess(to: .reminder, completion: completion)
+        #endif
 
         // A request macOS refuses outright — because the responsible process
         // declares no Reminders usage description — can leave this handler

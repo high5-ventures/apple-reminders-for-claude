@@ -6,13 +6,16 @@
 # Build all distribution artifacts from the single Swift source.
 #
 # Outputs:
-#   dist/reminders-eventkit         — compiled binary (matches host arch)
+#   dist/reminders-eventkit         — universal binary (arm64 + x86_64), macOS 11+
 #   dist/apple-reminders.mcpb       — ready-to-install Claude Desktop extension
 #   dist/skill/                     — standalone Claude Code skill directory
 #
 # Signing: set SIGNING_IDENTITY to a Developer ID to sign the binary with
 # Hardened Runtime. The release workflow sets this automatically; local
 # builds are unsigned unless you opt in.
+#
+# Architectures: set ARCHS to build a subset, e.g. ARCHS=arm64 for a faster
+# local build. Releases always use the default, both architectures.
 #
 # Usage:
 #   ./build.sh              # build everything (binary + skill + mcpb)
@@ -21,7 +24,11 @@
 #   ./build.sh mcpb         # just the .mcpb bundle
 #   ./build.sh clean        # wipe dist/
 
-set -euo pipefail
+set -Eeuo pipefail
+
+# Name the failing command instead of exiting silently: a tool that prints
+# nothing on failure otherwise leaves only the last "[build]" line behind.
+trap 'echo "[build] failed (exit $?) at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
 DIST="$REPO/dist"
@@ -30,18 +37,55 @@ BINARY_OUT="$DIST/reminders-eventkit"
 ENTITLEMENTS="$REPO/src/entitlements.plist"
 INFO_PLIST="$REPO/src/Info.plist"
 
+# Without an explicit -target, swiftc builds only the host architecture and
+# takes the build machine's macOS version as the minimum. That is how v1.0.4
+# shipped arm64-only with a macOS 14 minimum, which fails to launch on Intel
+# Macs and on Apple Silicon before macOS 14 (#21).
+MACOS_MIN="11.0"
+ARCHS="${ARCHS:-arm64 x86_64}"
+
 build_binary() {
-  echo "[build] compiling Swift binary → $BINARY_OUT"
+  echo "[build] compiling Swift binary ($ARCHS, macOS $MACOS_MIN+) → $BINARY_OUT"
   mkdir -p "$DIST"
-  # A bare executable has no bundle, so the Info.plist is linked into a
-  # __TEXT,__info_plist section. Without it macOS finds no usage description
-  # for the process and refuses Reminders access before EventKit is reached.
-  /usr/bin/swiftc -O "$BINARY_SRC" -o "$BINARY_OUT" \
-    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$INFO_PLIST"
+  local arch slice
+  local slices=()
+  for arch in $ARCHS; do
+    slice="$DIST/reminders-eventkit-$arch"
+    # A bare executable has no bundle, so the Info.plist is linked into a
+    # __TEXT,__info_plist section. Without it macOS finds no usage description
+    # for the process and refuses Reminders access before EventKit is reached.
+    /usr/bin/swiftc -O -target "$arch-apple-macos$MACOS_MIN" "$BINARY_SRC" -o "$slice" \
+      -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$INFO_PLIST"
+
+    if ! grep -q NSRemindersFullAccessUsageDescription "$slice"; then
+      echo "[build] embedded Info.plist missing from the $arch slice — refusing to ship" >&2
+      exit 1
+    fi
+
+    local minos
+    minos=$(otool -l "$slice" \
+      | awk '$2 == "LC_BUILD_VERSION" {found = 1} found && $1 == "minos" {print $2; exit}')
+    if [[ "$minos" != "$MACOS_MIN" ]]; then
+      echo "[build] the $arch slice requires macOS '$minos', expected $MACOS_MIN — refusing to ship" >&2
+      exit 1
+    fi
+    slices+=("$slice")
+  done
+
+  if [[ ${#slices[@]} -eq 1 ]]; then
+    mv "${slices[0]}" "$BINARY_OUT"
+  else
+    lipo -create "${slices[@]}" -output "$BINARY_OUT"
+    rm -f "${slices[@]}"
+  fi
   chmod +x "$BINARY_OUT"
 
-  if ! grep -q NSRemindersFullAccessUsageDescription "$BINARY_OUT"; then
-    echo "[build] embedded Info.plist missing from $BINARY_OUT — refusing to ship" >&2
+  # lipo lists slices in file order, so compare sorted.
+  local want have
+  want=$(printf '%s\n' $ARCHS | sort | xargs)
+  have=$(lipo -archs "$BINARY_OUT" | tr ' ' '\n' | sort | xargs)
+  if [[ "$have" != "$want" ]]; then
+    echo "[build] $BINARY_OUT contains '$have', expected '$want' — refusing to ship" >&2
     exit 1
   fi
 
@@ -88,7 +132,9 @@ build_mcpb() {
   cp "$BINARY_OUT"                          "$STAGE/bin/reminders-eventkit"
   [[ -f "$REPO/assets/icon.png" ]] && cp "$REPO/assets/icon.png" "$STAGE/"
   # Reproducible install from the committed lockfile — no resolver drift.
-  (cd "$STAGE" && npm ci --silent --omit=dev)
+  # Not --silent: that also hides npm's own error, such as EACCES on a
+  # root-owned ~/.npm cache, and the build then just stops here (#21).
+  npm --prefix "$STAGE" ci --omit=dev --no-audit --no-fund
   command -v mcpb >/dev/null 2>&1 || {
     echo "[build] 'mcpb' CLI not found — install with: npm install -g @anthropic-ai/mcpb" >&2
     exit 1
@@ -108,6 +154,8 @@ case "${1:-all}" in
   skill)  build_skill  ;;
   mcpb)   build_mcpb   ;;
   clean)  clean        ;;
-  all)    build_binary && build_skill && build_mcpb ;;
+  # Sequential, not chained with &&: bash ignores `set -e` (and the ERR trap)
+  # inside every function of an && list except the last one.
+  all)    build_binary; build_skill; build_mcpb ;;
   *)      echo "Usage: $0 [binary|skill|mcpb|clean|all]" >&2; exit 1 ;;
 esac
