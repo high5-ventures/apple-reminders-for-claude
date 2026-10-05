@@ -16,7 +16,7 @@ Then configure your MCP client (Cursor, Zed, etc.) to launch `apple-reminders-mc
 
 ## Platform
 
-macOS 11+ only. The `os` field in `package.json` is set to `darwin`, so `npm install` on Linux or Windows prints a warning and skips the binary download.
+macOS 11+ only, on Apple Silicon or Intel (the binary is universal). The `os` field in `package.json` is set to `darwin`, so `npm install` on Linux or Windows prints a warning and skips the binary download.
 
 ## Distribution alternatives
 

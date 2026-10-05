@@ -26,7 +26,7 @@ cd apple-reminders-for-claude
 
 The unified build produces:
 
-- `dist/reminders-eventkit` — unsigned Swift binary for local dev
+- `dist/reminders-eventkit` — unsigned universal Swift binary (arm64 + x86_64, macOS 11+) for local dev; `ARCHS=arm64 ./build.sh` builds a single architecture
 - `dist/skill/` — skill directory for Claude Code (copy to `~/.claude/skills/apple-reminders/`)
 - `dist/apple-reminders.mcpb` — unsigned bundle for Claude Desktop
 
@@ -99,6 +99,19 @@ For the MCP Registry manifest:
 node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/plugin.json"))'
 ```
 
+## Continuous integration
+
+Runner time is spent where it pays off, so CI has two tiers:
+
+- **Every pull request** runs `ci.yml`: light checks on Linux, with no Swift build. It lints and cross-checks the manifests, parses the JavaScript and shell scripts, packs the npm tarball, and lists the server's tools over MCP. It only starts when a PR touches files those checks read.
+- **Everything that builds the binary** lives in `build.yml` (macOS: universal build, signer checks, smoke tests on both architectures). It never runs on its own. `ci-batch.yml` runs it together with the light checks, by hand against `main` once several merges have landed, and only after a maintainer has approved the run:
+
+  ```bash
+  gh workflow run ci-batch.yml --ref main
+  ```
+
+  A red batch run means fix or revert before more merges land. Releases are cut only from a `main` commit whose batch run is green. To try a risky change before merging, dispatch the batch against its branch instead of `main`.
+
 ## Commit style
 
 - One commit per logical change.
@@ -125,7 +138,7 @@ git push origin v1.1.0
 
 The `.github/workflows/release.yml` workflow then:
 
-1. Builds the Swift binary on `macos-latest`
+1. Builds the universal Swift binary (arm64 + x86_64) on `macos-14` and refuses to publish one that lacks either slice
 2. Imports the `Developer ID Application: high5 ventures GmbH` certificate from `APPLE_CERTIFICATE_P12_BASE64`
 3. Signs the binary with Hardened Runtime
 4. Packs the `.mcpb`

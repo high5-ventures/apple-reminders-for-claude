@@ -29,9 +29,9 @@ Destructive operations are idempotent — running them twice yields the same end
 
 ## Prerequisites
 
-- macOS with the Reminders app present.
-- The compiled binary at `bin/reminders-eventkit` (relative to this skill directory). If it's missing, see the "Rebuilding the binary" section below.
-- The `Bash` tool must be available. This skill does **not** use the `mcp__Control_your_Mac__osascript` tool — the EventKit binary is called directly via Bash, which has no 30-second timeout.
+- macOS 11 or later with the Reminders app present, on Apple Silicon or Intel.
+- The signed binary at `${CLAUDE_SKILL_DIR}/bin/reminders-eventkit`. If it's missing, see "If the binary is missing" below.
+- The `Bash` tool must be available. Every command below is a Bash invocation of the binary; only the optional flagged fallback at the end runs AppleScript, also through Bash.
 - On first run, macOS shows a Privacy permission dialog for Reminders access. The user grants it once and it persists until revoked in *System Settings → Privacy & Security → Reminders*.
 
 ## Execution protocol
@@ -41,7 +41,7 @@ Every function is a single shell invocation. Do not deviate.
 1. **Pick the command** from the catalog below based on the user's intent.
 2. **Invoke the binary** via the `Bash` tool:
    ```bash
-   ~/.claude/skills/apple-reminders/bin/reminders-eventkit <command> [args...]
+   ${CLAUDE_SKILL_DIR}/bin/reminders-eventkit <command> [args...]
    ```
 3. **Parse the stdout** — exactly one line of JSON is printed. It's always one of:
    - `{"status":"ok","data": <payload>}` — success.
@@ -55,7 +55,7 @@ Commands that take structured data use JSON payloads. Commands that take simple 
 
 **JSON payload via stdin — required for `create-reminder` and `update-reminder`.** Pass the literal sentinel `-` as the single positional argument and stream the JSON on stdin. This is the **only** correct way to pass user-supplied content: shell-quoting arbitrary strings from a user message is unsafe and will break on quotes, backticks, `$`, newlines, or any bracket the shell tries to glob. The `Bash` tool supports stdin via a here-doc:
 ```bash
-~/.claude/skills/apple-reminders/bin/reminders-eventkit create-reminder - <<'JSON'
+${CLAUDE_SKILL_DIR}/bin/reminders-eventkit create-reminder - <<'JSON'
 {"list":"Groceries","title":"Buy milk","body":"organic, 1.5l","dueDate":"2026-04-11T18:00:00","priority":5}
 JSON
 ```
@@ -63,7 +63,7 @@ Build the JSON with a proper JSON encoder (e.g. `jq -n`, a Python one-liner, or 
 
 **Scalar arguments** (list names, IDs, filters): quote each with double quotes to handle spaces. Example:
 ```bash
-~/.claude/skills/apple-reminders/bin/reminders-eventkit list-reminders "Reise und Freizeit" "open"
+${CLAUDE_SKILL_DIR}/bin/reminders-eventkit list-reminders "Reise und Freizeit" "open"
 ```
 
 **Disambiguating duplicate list names.** Multiple reminder lists can share the same title (common when you have both an iCloud "Personal" list and a local one). Every command that accepts a list name also accepts `id:<calendar_identifier>` — take the stable `calendar_identifier` from a prior `list-lists` call. If a plain title is ambiguous, the binary returns `LIST_AMBIGUOUS` with a `candidates` array listing each matching list's name, account, and `calendar_identifier`; surface the ambiguity to the user, pick the intended one, and retry with `id:...`.
@@ -74,14 +74,13 @@ Build the JSON with a proper JSON encoder (e.g. `jq -n`, a Python one-liner, or 
 
 | Command | Arguments | Returns (on success) |
 |---|---|---|
-| `list-lists` | — | `{"lists":[{"name","account","open_count","completed_count"}]}` |
-| `get-list-info` | `<listName>` | `{"name","account","open_count","completed_count"}` |
+| `list-lists` | — | `{"lists":[{"name","account","calendar_identifier","open_count","completed_count"}]}` |
+| `get-list-info` | `<listName>` | `{"name","account","calendar_identifier","open_count","completed_count"}` |
 | `list-reminders` | `<listName> <filter>` | `{"reminders":[<reminder>...]}` |
 | `search-reminders` | `<query> <filter> <limit>` | `{"reminders":[<reminder>...]}` |
 | `get-today` | — | `{"reminders":[<reminder>...]}` |
 | `get-overdue` | — | `{"reminders":[<reminder>...]}` |
 | `get-scheduled` | — | `{"reminders":[<reminder>...]}` |
-| `get-flagged` | — | `{"reminders":[], "warning":"..."}` — see note below |
 | `get-reminder` | `<id>` | `{"reminder": <reminder>}` |
 | `create-reminder` | `-` (JSON on stdin) | `{"reminder": <reminder>}` |
 | `update-reminder` | `-` (JSON on stdin) | `{"reminder": <reminder>}` |
@@ -101,8 +100,7 @@ Build the JSON with a proper JSON encoder (e.g. `jq -n`, a Python one-liner, or 
   "title": "Buy milk",                   // required
   "body": "organic, 1.5l",               // optional
   "dueDate": "2026-04-11T18:00:00",      // optional, ISO-8601
-  "priority": 5,                         // optional, one of 0|1|5|9, default 0
-  "flagged": false                       // accepted but ignored — see flagged note
+  "priority": 5                          // optional, one of 0|1|5|9, default 0
 }
 ```
 
@@ -115,8 +113,7 @@ Build the JSON with a proper JSON encoder (e.g. `jq -n`, a Python one-liner, or 
   "body": "...",                         // optional, replaces
   "dueDate": "2026-04-11T18:00:00",      // optional, replaces
   "clearDueDate": true,                  // optional, wipes due date explicitly
-  "priority": 5,                         // optional
-  "flagged": true                        // accepted but ignored — see flagged note
+  "priority": 5                          // optional
 }
 ```
 
@@ -145,7 +142,7 @@ Optional fields are `null` when not set. Field names are stable — the skill an
 
 ### `flagged` is not readable or writable via EventKit
 
-Apple's EventKit framework does not expose the "flagged" attribute that the Reminders UI shows. `get-flagged` always returns an empty array with a `warning` field. `create-reminder` and `update-reminder` accept `flagged` in the payload for API stability but silently ignore it. If the user explicitly needs flagged queries, tell them this limitation and offer to fall back to the AppleScript path described below.
+Apple's EventKit framework does not expose the "flagged" attribute that the Reminders UI shows. The binary has no flagged query, every reminder it returns carries `"flagged": false` whatever the Reminders app shows, and the create/update payloads have no `flagged` field. If the user explicitly needs flagged queries, tell them this limitation and offer to fall back to the AppleScript path described below.
 
 ### Completed-count may differ from the Reminders UI
 
@@ -161,23 +158,21 @@ Same reasoning — deferred to keep the surface area small. Sub-tasks in particu
 
 ## AppleScript fallback for `flagged`
 
-If the user absolutely needs flagged-reminder queries, there is a pre-built AppleScript template at `scripts/get_flagged.applescript` plus a prelude at `lib/_prelude.applescript` that together implement this one missing function via the `Control your Mac` MCP. Read both files, concatenate (body + prelude), and send via `mcp__Control_your_Mac__osascript`. This fallback is **only** for `get-flagged` and is slow on large databases — use it sparingly.
-
-## Rebuilding the binary
-
-If the binary at `bin/reminders-eventkit` is missing, corrupted, or outdated, rebuild it:
+If the user absolutely needs flagged-reminder queries, there is a pre-built AppleScript template at `scripts/get_flagged.applescript` plus a prelude at `lib/_prelude.applescript` that together implement this one missing query. Concatenate them (body first, then prelude) and pipe the result into `osascript` via Bash:
 
 ```bash
-swiftc -O \
-  ~/.claude/skills/apple-reminders/src/reminders-eventkit.swift \
-  -o ~/.claude/skills/apple-reminders/bin/reminders-eventkit
+cat "${CLAUDE_SKILL_DIR}/scripts/get_flagged.applescript" \
+    "${CLAUDE_SKILL_DIR}/lib/_prelude.applescript" | osascript
 ```
 
-Requirements:
-- Apple Swift compiler (`/usr/bin/swiftc`, ships with macOS command-line tools)
-- macOS 11+ (uses `requestFullAccessToReminders` on macOS 14+ with a fallback for older versions)
+It prints the same `{"status":"ok","data":{"reminders":[...]}}` envelope as the binary. macOS may first ask the user to let the terminal control Reminders. This fallback is **only** for flagged queries and is slow on large databases — use it sparingly.
 
-The source is a single ~500-line Swift file under `src/reminders-eventkit.swift`. Read it before rebuilding if you need to audit what the binary does.
+## If the binary is missing
+
+Do not compile anything on the user's machine. The binary is a signed, notarized release artifact:
+
+- **Installed as a Claude Code plugin:** the plugin's SessionStart hook downloads the binary for the installed version, verifies its signature, and links it into `bin/`. It runs when a session starts, so ask the user to start a new session; if the hook failed, its error output says why (most often no network access to GitHub).
+- **Copied in as a standalone skill:** the binary is part of the copied directory. Ask the user to download `reminders-eventkit` from the [latest release](https://github.com/high5-ventures/apple-reminders-for-claude/releases/latest) into `${CLAUDE_SKILL_DIR}/bin/` and make it executable (`chmod +x`), or to copy the skill again from `dist/skill/` after running `./build.sh skill` in a checkout of the repository.
 
 ## Error codes
 
@@ -189,6 +184,7 @@ The source is a single ~500-line Swift file under `src/reminders-eventkit.swift`
 - `INVALID_PAYLOAD` — the JSON payload couldn't be parsed, was missing a required field, or contained an unparseable `dueDate`. The message says which.
 - `UNKNOWN_COMMAND` — the first positional argument wasn't one of the commands listed in the catalog above. Usually a typo.
 - `PERMISSION_DENIED` — macOS refused Reminders access. Tell the user to approve it in *System Settings → Privacy & Security → Reminders*.
+- `PERMISSION_UNAVAILABLE` — macOS refused the request without showing a dialog, so there is no entry in System Settings to switch on. Granting or resetting permissions cannot fix it; show the user the message and point them at the project's issue tracker.
 - `SAVE_FAILED` / `DELETE_FAILED` — EventKit refused the write. Rare; usually transient. Retry once, then show the user the raw message.
 
 ## Worked example
@@ -196,7 +192,7 @@ The source is a single ~500-line Swift file under `src/reminders-eventkit.swift`
 User: *"Add 'Buy milk' to my Groceries list for tomorrow at 6 PM, note: 'organic, 1.5l'."*
 
 ```bash
-~/.claude/skills/apple-reminders/bin/reminders-eventkit create-reminder - <<'JSON'
+${CLAUDE_SKILL_DIR}/bin/reminders-eventkit create-reminder - <<'JSON'
 {"list":"Groceries","title":"Buy milk","body":"organic, 1.5l","dueDate":"2026-04-12T18:00:00","priority":0}
 JSON
 ```

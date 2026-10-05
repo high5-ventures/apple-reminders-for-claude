@@ -9,7 +9,11 @@
 // AppleScript (EventKit is indexed, AppleScript scans linearly).
 //
 // Build:
-//   swiftc -O reminders-eventkit.swift -o reminders-eventkit
+//   ./build.sh binary
+//
+// A bare `swiftc` call is not enough: build.sh pins the deployment target,
+// builds arm64 and x86_64 into one universal binary, and links the Info.plist
+// that macOS needs before it will grant Reminders access.
 //
 // Usage:
 //   reminders-eventkit <command> [args...]
@@ -35,12 +39,11 @@
 // where noted):
 //
 //   create:
-//     { "list": "Groceries",      // required
+//     { "list": "Groceries",      // required; exact title or "id:<calendar_identifier>"
 //       "title": "Buy milk",      // required
 //       "body": "organic, 1.5l",
 //       "dueDate": "2026-04-11T18:00:00",  // ISO-8601 local or with offset
-//       "priority": 5,            // 0|1|5|9
-//       "flagged": false }
+//       "priority": 5 }           // 0|1|5|9
 //
 //   update:
 //     { "id": "UUID",             // required
@@ -48,8 +51,10 @@
 //       "body": "...",
 //       "dueDate": "...",
 //       "clearDueDate": true,     // explicit wipe
-//       "priority": 5,
-//       "flagged": true }
+//       "priority": 5 }
+//
+// There is no `flagged` field: EventKit does not expose the flag (see the note
+// below reminderDict).
 //
 // Every invocation prints exactly one line of JSON to stdout:
 //
@@ -240,20 +245,25 @@ final class Store {
         let sem = DispatchSemaphore(value: 0)
         var granted = false
         var failure: Error?
-
-        if #available(macOS 14.0, *) {
-            store.requestFullAccessToReminders { ok, err in
-                granted = ok
-                failure = err
-                sem.signal()
-            }
-        } else {
-            store.requestAccess(to: .reminder) { ok, err in
-                granted = ok
-                failure = err
-                sem.signal()
-            }
+        let completion: EKEventStoreRequestAccessCompletionHandler = { ok, err in
+            granted = ok
+            failure = err
+            sem.signal()
         }
+
+        // `#available` is a runtime check: the compiler still needs the macOS 14
+        // symbol in its SDK. Swift 5.9 ships with Xcode 15, the first toolchain
+        // carrying the macOS 14 SDK, so older toolchains (e.g. on macOS 13)
+        // compile only the fallback instead of failing the build.
+        #if compiler(>=5.9)
+        if #available(macOS 14.0, *) {
+            store.requestFullAccessToReminders(completion: completion)
+        } else {
+            store.requestAccess(to: .reminder, completion: completion)
+        }
+        #else
+        store.requestAccess(to: .reminder, completion: completion)
+        #endif
 
         // A request macOS refuses outright — because the responsible process
         // declares no Reminders usage description — can leave this handler

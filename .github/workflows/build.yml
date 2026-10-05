@@ -1,0 +1,117 @@
+name: Build (macOS)
+
+# Everything that compiles the binary or needs a macOS runner. Deliberately not
+# triggered by pushes or pull requests (#20): ci-batch.yml calls it after
+# merges, and it can be dispatched by hand against a branch.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build + validate (unsigned)
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      # actions/checkout@v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      # actions/setup-node@v6.4.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24
+
+      - name: Install MCPB CLI
+        run: npm install -g @anthropic-ai/mcpb
+
+      # build.sh itself refuses a binary that lacks a requested architecture
+      # or requires a newer macOS than 11.0.
+      - name: Build unsigned binary + skill + mcpb
+        run: ./build.sh
+
+      # The signer check is the one install step an unsigned CI build cannot
+      # exercise — and getting it wrong bricks every single install (issues
+      # #2, #3, where `codesign -dv` never prints the `Authority=` line the
+      # old check grepped for). Pin a known-good, Developer ID-signed release
+      # asset and assert both installers accept it. A negative test alone
+      # would not catch this: a malformed requirement makes codesign reject
+      # everything, so only a positive case proves the check still passes
+      # genuine binaries.
+      - name: Signer check accepts a genuine signed binary
+        run: |
+          REF=v1.0.3   # any published release works; pinned so CI does not
+                       # depend on the version currently under development
+          curl --fail --silent --location --output "$RUNNER_TEMP/ref-binary" \
+            "https://github.com/high5-ventures/apple-reminders-for-claude/releases/download/$REF/reminders-eventkit"
+          chmod +x "$RUNNER_TEMP/ref-binary"
+          ./scripts/verify-signature.sh "$RUNNER_TEMP/ref-binary"
+          node npm-package/scripts/verify-signature.js "$RUNNER_TEMP/ref-binary"
+
+      - name: Signer check rejects a foreign signature
+        run: |
+          # Ad-hoc signed: the signature is intact, but it is not ours. Both
+          # installers must refuse it.
+          cp dist/reminders-eventkit "$RUNNER_TEMP/adhoc-binary"
+          codesign --force --sign - "$RUNNER_TEMP/adhoc-binary"
+          if ./scripts/verify-signature.sh "$RUNNER_TEMP/adhoc-binary" 2>/dev/null; then
+            echo "verify-signature.sh accepted an ad-hoc signed binary" >&2
+            exit 1
+          fi
+          if node npm-package/scripts/verify-signature.js "$RUNNER_TEMP/adhoc-binary" 2>/dev/null; then
+            echo "verify-signature.js accepted an ad-hoc signed binary" >&2
+            exit 1
+          fi
+
+      - name: Binary carries the Reminders usage description
+        run: |
+          # A bare executable has no bundle: without the linked
+          # __TEXT,__info_plist section macOS refuses Reminders access before
+          # EventKit is reached, with no dialog and no System Settings entry.
+          for key in NSRemindersUsageDescription NSRemindersFullAccessUsageDescription; do
+            grep -q "$key" dist/reminders-eventkit \
+              || { echo "$key missing from embedded Info.plist" >&2; exit 1; }
+          done
+
+      # Un-quarantined: this step used to hang forever inside the EventKit
+      # access request and cancel the whole job at its 20-minute timeout. The
+      # request is now bounded, so a runner without a TCC grant gets a prompt
+      # answer instead of a deadlock.
+      - name: Smoke-test binary (list-lists)
+        env:
+          REMINDERS_TCC_TIMEOUT_SECONDS: 5
+        run: |
+          # No TCC grant on a headless runner, so the expected outcome is a
+          # permission error — but it must arrive as a JSON envelope, quickly.
+          # macOS ships no GNU `timeout`; perl's alarm survives exec and is
+          # always present. A fired alarm kills the child with SIGALRM -> 142.
+          set +e
+          OUTPUT=$(perl -e 'alarm 60; exec @ARGV' ./dist/reminders-eventkit list-lists 2>&1)
+          EXIT=$?
+          set -e
+          echo "$OUTPUT"
+          if [[ $EXIT -eq 142 ]]; then
+            echo "Binary hung in the EventKit access request despite the bounded wait" >&2
+            exit 1
+          fi
+          echo "$OUTPUT" | grep -Eq '"status":"(ok|error)"' \
+            || { echo "Binary did not emit JSON envelope"; exit 1; }
+
+      # The runner is Apple Silicon, so the smoke test above only ran the
+      # arm64 slice. Launch the Intel slice under Rosetta (#21); an unknown
+      # command answers before EventKit is touched.
+      - name: Smoke-test the x86_64 slice
+        run: |
+          if ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "::warning::Rosetta 2 is not installed on this runner; the x86_64 slice was not launched"
+            exit 0
+          fi
+          # Pre-setting the guard skips the TCC re-exec, so the check stays
+          # on the x86_64 slice instead of possibly handing over to arm64.
+          set +e
+          OUTPUT=$(REMINDERS_EVENTKIT_TCC_DISCLAIMED=1 arch -x86_64 ./dist/reminders-eventkit no-such-command 2>&1)
+          set -e
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q '"code":"UNKNOWN_COMMAND"' \
+            || { echo "x86_64 slice did not run" >&2; exit 1; }

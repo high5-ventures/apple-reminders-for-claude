@@ -1,0 +1,30 @@
+name: CI batch
+
+# The full run: the light checks plus everything that builds the binary on
+# macOS (#20). Pull requests only get the light checks (ci.yml); this runs by
+# hand against main once several merges have landed, and only after a
+# maintainer has approved the run:
+#
+#   gh workflow run ci-batch.yml --ref main
+#
+# A red batch run means fix or revert before more merges land, and a release
+# is cut only from a main commit whose batch run is green.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-batch-${{ github.ref }}
+  # An approved run is never cancelled by a later one; it queues instead.
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Light checks
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: macOS build
+    uses: ./.github/workflows/build.yml
