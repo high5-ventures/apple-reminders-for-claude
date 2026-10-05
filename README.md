@@ -212,7 +212,7 @@ All 13 tools return a stable JSON envelope — `{ "status": "ok", "data": ... }`
 | Tool | Annotation | Purpose |
 |---|---|---|
 | `get_lists` | read-only | List all reminder lists with open/completed counts |
-| `get_list_info` | read-only | Metadata for one list by name |
+| `get_list_info` | read-only | Metadata for one list by name or id |
 | `list_reminders` | read-only | List reminders in a list (open/completed/all) |
 | `search_reminders` | read-only | Full-text search across all lists |
 | `get_today` | read-only | Reminders due today |

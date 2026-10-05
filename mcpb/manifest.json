@@ -28,7 +28,7 @@
     },
     {
       "name": "get_list_info",
-      "description": "Get metadata for one reminder list by exact name."
+      "description": "Get metadata for one reminder list by exact name or id."
     },
     {
       "name": "list_reminders",

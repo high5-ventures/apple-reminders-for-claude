@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Fixed
+- **Tool descriptions documented a `flagged` field that does not exist** ([#18](https://github.com/high5-ventures/apple-reminders-for-claude/issues/18)) — `create_reminder` and `update_reminder` claimed to accept `flagged`, which is in neither input schema. The sentence is gone, and so are the `flagged` payload fields and the long-removed `get-flagged` command from the skill documentation.
+
+### Changed
+- **Tool descriptions say what the model needs to know** ([#19](https://github.com/high5-ventures/apple-reminders-for-claude/issues/19)) — list arguments document the `id:<calendar_identifier>` form and `LIST_AMBIGUOUS`, every parameter has a description, and `get_lists` states the shared result and error envelope, the reminder fields, that `flagged` is always false, and that the first call can time out while macOS shows the permission prompt.
+- **The Claude Code skill resolves its binary through `${CLAUDE_SKILL_DIR}`** ([#19](https://github.com/high5-ventures/apple-reminders-for-claude/issues/19)) — the examples hardcoded `~/.claude/skills/apple-reminders/`, which is not where a plugin install lives. The skill also no longer tells the agent to compile the binary on the user's machine; it points at the signed binary the plugin's SessionStart hook installs. The AppleScript fallback for flagged reminders runs through `osascript` in Bash instead of an MCP tool name that was never verified.
+
 ## [1.0.4] — 2026-08-21
 
 Repair release. Both installation paths outside Claude Desktop were broken from the moment v1.0.3 shipped, and Reminders access itself could not be granted in Claude Desktop at all. If you tried this connector and gave up, this is the version to retry.

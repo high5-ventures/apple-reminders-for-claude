@@ -35,12 +35,11 @@
 // where noted):
 //
 //   create:
-//     { "list": "Groceries",      // required
+//     { "list": "Groceries",      // required; exact title or "id:<calendar_identifier>"
 //       "title": "Buy milk",      // required
 //       "body": "organic, 1.5l",
 //       "dueDate": "2026-04-11T18:00:00",  // ISO-8601 local or with offset
-//       "priority": 5,            // 0|1|5|9
-//       "flagged": false }
+//       "priority": 5 }           // 0|1|5|9
 //
 //   update:
 //     { "id": "UUID",             // required
@@ -48,8 +47,10 @@
 //       "body": "...",
 //       "dueDate": "...",
 //       "clearDueDate": true,     // explicit wipe
-//       "priority": 5,
-//       "flagged": true }
+//       "priority": 5 }
+//
+// There is no `flagged` field: EventKit does not expose the flag (see the note
+// below reminderDict).
 //
 // Every invocation prints exactly one line of JSON to stdout:
 //

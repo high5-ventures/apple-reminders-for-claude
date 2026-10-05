@@ -162,24 +162,44 @@ const DESTRUCTIVE_IDEMPOTENT = {
   openWorldHint: false,
 };
 
+// Every list argument goes through the binary's resolveList(), which accepts
+// an exact title or `id:` plus a calendar_identifier, and refuses to guess
+// between lists that share a title.
+const LIST_REFERENCE =
+  "Exact list name, or 'id:<calendar_identifier>' from get_lists. If several " +
+  "lists share the name, the call fails with LIST_AMBIGUOUS and a `candidates` " +
+  "array; retry with the id: form.";
+
+const REMINDER_ID = {
+  type: "string",
+  description: "EventKit UUID: the `id` field of any reminder result",
+};
+
 const TOOLS = [
   {
     name: "get_lists",
     description:
-      "List all reminder lists on this Mac with open and completed counts. No arguments.",
+      "List all reminder lists on this Mac with their account, open and completed counts, " +
+      "and the `calendar_identifier` that list arguments accept as 'id:<calendar_identifier>'. " +
+      "No arguments. " +
+      // The contract every tool shares, stated once.
+      "Every tool returns {status: 'ok', data} or {status: 'error', code, message}. " +
+      "Reminder objects carry `id`, `name` (the title), `body` (the notes), `due_date`, " +
+      "`remind_me_date`, `completed`, `completion_date`, `priority` and `list`; dates are " +
+      "local time like 2026-04-11T18:00:00. `flagged` is always false because EventKit does " +
+      "not expose it. The first call can fail with WRAPPER_TIMEOUT while macOS shows the " +
+      "Reminders permission prompt; retry once the user has answered it.",
     inputSchema: { type: "object", properties: {} },
     annotations: { title: "Get reminder lists", ...READ_ONLY },
   },
   {
     name: "get_list_info",
-    description: "Get metadata for one reminder list by exact name.",
+    description:
+      "Get one reminder list's account, open and completed counts, and calendar_identifier.",
     inputSchema: {
       type: "object",
       properties: {
-        list: {
-          type: "string",
-          description: "Exact name of the list, e.g. 'Groceries'",
-        },
+        list: { type: "string", description: LIST_REFERENCE },
       },
       required: ["list"],
     },
@@ -192,10 +212,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        list: {
-          type: "string",
-          description: "Exact name of the list",
-        },
+        list: { type: "string", description: LIST_REFERENCE },
         filter: {
           type: "string",
           enum: ["open", "completed", "all"],
@@ -262,10 +279,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        id: {
-          type: "string",
-          description: "The reminder's EventKit UUID",
-        },
+        id: REMINDER_ID,
       },
       required: ["id"],
     },
@@ -274,13 +288,13 @@ const TOOLS = [
   {
     name: "create_reminder",
     description:
-      "Create a new reminder in a specified list. Due date must be ISO-8601 local time (e.g. 2026-04-11T18:00:00) or omitted. Priority is 0 (none), 1 (high), 5 (medium), or 9 (low). The `flagged` field is accepted for API stability but silently ignored — EventKit does not expose it.",
+      "Create a new reminder in a specified list. Due date must be ISO-8601 local time (e.g. 2026-04-11T18:00:00) or omitted. Priority is 0 (none), 1 (high), 5 (medium), or 9 (low).",
     inputSchema: {
       type: "object",
       properties: {
         list: {
           type: "string",
-          description: "Target list name (must already exist)",
+          description: "Target list (must already exist). " + LIST_REFERENCE,
         },
         title: { type: "string", description: "Reminder title" },
         body: {
@@ -306,22 +320,30 @@ const TOOLS = [
   {
     name: "update_reminder",
     description:
-      "Update an existing reminder by ID. Only provided fields are changed. Use `clearDueDate: true` to explicitly remove a due date (different from omitting `dueDate`). The `flagged` field is accepted but silently ignored.",
+      "Update an existing reminder by ID. Only provided fields are changed. Use `clearDueDate: true` to explicitly remove a due date (different from omitting `dueDate`).",
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "EventKit UUID of the reminder" },
-        title: { type: "string" },
-        body: { type: "string" },
+        id: REMINDER_ID,
+        title: { type: "string", description: "New title" },
+        body: {
+          type: "string",
+          description: "New notes text (replaces the existing notes)",
+        },
         dueDate: {
           type: "string",
-          description: "New ISO-8601 local-time due date",
+          description:
+            "New ISO-8601 local-time due date; ignored when clearDueDate is true",
         },
         clearDueDate: {
           type: "boolean",
           description: "If true, explicitly remove the existing due date",
         },
-        priority: { type: "integer", enum: [0, 1, 5, 9] },
+        priority: {
+          type: "integer",
+          enum: [0, 1, 5, 9],
+          description: "0=none, 1=high, 5=medium, 9=low",
+        },
       },
       required: ["id"],
     },
@@ -333,7 +355,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string" },
+        id: REMINDER_ID,
       },
       required: ["id"],
     },
@@ -345,7 +367,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string" },
+        id: REMINDER_ID,
       },
       required: ["id"],
     },
@@ -357,7 +379,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string" },
+        id: REMINDER_ID,
       },
       required: ["id"],
     },
