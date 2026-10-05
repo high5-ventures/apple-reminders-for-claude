@@ -4,6 +4,10 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-10-05
+
+Platform release. Every release up to and including v1.0.4 shipped a binary that only Apple Silicon Macs on macOS 14 or later could launch. If you are on an Intel Mac, or on macOS 11–13, this is the first version that runs for you.
+
 ### Fixed
 - **The connector failed to start on Intel Macs and on macOS 11–13** ([#21](https://github.com/high5-ventures/apple-reminders-for-claude/issues/21)) — `build.sh` called `swiftc` without a target, so the release binary contained only the build runner's architecture and took the runner's macOS version as its minimum: v1.0.4 is arm64-only and requires macOS 14. Intel Macs failed every tool call with `spawn Unknown system error -86` (EBADARCH), and Apple Silicon Macs before macOS 14 could not load the binary either. The binary is now universal (arm64 + x86_64) with a macOS 11 minimum. `build.sh` refuses a binary that lacks a requested architecture or requires a newer macOS, and the release workflow refuses to publish one that is not universal.
 - **Building from source failed on macOS 13** ([#21](https://github.com/high5-ventures/apple-reminders-for-claude/issues/21)) — `if #available(macOS 14.0, *)` is a runtime check, so toolchains without the macOS 14 SDK rejected the `requestFullAccessToReminders` call. Toolchains older than Swift 5.9 (Xcode 15) now compile only the older `requestAccess(to:)` request.
@@ -113,7 +117,9 @@ Pre-release hardening from internal code review.
 
 Initial non-public release. Swift/EventKit wrapper, 13 MCP tools, Claude Code skill, Claude Desktop `.mcpb` bundle.
 
-[Unreleased]: https://github.com/high5-ventures/apple-reminders-for-claude/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/high5-ventures/apple-reminders-for-claude/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.5
+[1.0.4]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.4
 [1.0.3]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.3
 [1.0.2]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.2
 [1.0.1]: https://github.com/high5-ventures/apple-reminders-for-claude/releases/tag/v1.0.1
