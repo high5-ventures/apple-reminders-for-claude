@@ -268,7 +268,24 @@ jobs:
           # mcp-publisher needs interactive github-oauth; for CI we use the
           # GitHub Actions OIDC flow via the mcp-publisher github-oidc method.
           "$RUNNER_TEMP/mcp-publisher" login github-oidc
-          "$RUNNER_TEMP/mcp-publisher" publish
+
+          # The registry checks that the npm version it is asked to list
+          # exists, and npm can take a minute to serve a version it has just
+          # accepted: v1.0.5's first attempt ran one second after `npm
+          # publish` and got a 404. Retry that error only; anything else
+          # fails straight away.
+          for attempt in 1 2 3 4 5 6; do
+            if OUTPUT=$("$RUNNER_TEMP/mcp-publisher" publish 2>&1); then
+              echo "$OUTPUT"
+              exit 0
+            fi
+            echo "$OUTPUT"
+            grep -q "was not found" <<<"$OUTPUT" || exit 1
+            echo "npm does not serve this version yet (attempt $attempt of 6); retrying in 30 s"
+            sleep 30
+          done
+          echo "npm still did not serve this version after 3 minutes" >&2
+          exit 1
 
       - name: Clean up keychain
         if: always()
