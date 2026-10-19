@@ -42,7 +42,8 @@
 //     { "list": "Groceries",      // required; exact title or "id:<calendar_identifier>"
 //       "title": "Buy milk",      // required
 //       "body": "organic, 1.5l",
-//       "dueDate": "2026-04-11T18:00:00",  // ISO-8601 local or with offset
+//       "dueDate": "2026-04-11T18:00:00",  // ISO-8601 local or with offset,
+//                                          // or "2026-04-11" for a date without a time
 //       "priority": 5 }           // 0|1|5|9
 //
 //   update:
@@ -148,6 +149,97 @@ func parseDate(_ s: String) -> Date? {
     return iso.date(from: s)
 }
 
+/// EventKit requires due date components in the Gregorian calendar, whatever
+/// calendar the user has picked in System Settings.
+let gregorian: Calendar = {
+    var c = Calendar(identifier: .gregorian)
+    c.timeZone = TimeZone.current
+    return c
+}()
+
+/// A due date as the create and update payloads give it: a point in time, or
+/// a day without a time. A day without a time is what the Reminders app
+/// creates when "Time" is off: due date components with no hour, minute or
+/// second, and no alert.
+enum DueDate {
+    case time(Date)
+    case day(DateComponents)
+}
+
+/// Parse a payload `dueDate`. `YYYY-MM-DD` is a day without a time; anything
+/// `parseDate` accepts is a point in time. Rejects days that do not exist,
+/// such as 2026-02-30, instead of rolling them over into the next month.
+func parseDueDate(_ s: String) -> DueDate? {
+    if s.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil {
+        let parts = s.split(separator: "-").compactMap { Int($0) }
+        var comps = DateComponents(year: parts[0], month: parts[1], day: parts[2])
+        guard let d = gregorian.date(from: comps) else { return nil }
+        let back = gregorian.dateComponents([.year, .month, .day], from: d)
+        guard back.year == comps.year, back.month == comps.month, back.day == comps.day
+        else { return nil }
+        comps.calendar = gregorian
+        return .day(comps)
+    }
+    return parseDate(s).map(DueDate.time)
+}
+
+/// The due date components of a day without a time, or nil for a due date
+/// with a time or no due date.
+func dueDay(_ dc: DateComponents?) -> DateComponents? {
+    guard let dc = dc, dc.hour == nil,
+          dc.year != nil, dc.month != nil, dc.day != nil
+    else { return nil }
+    return dc
+}
+
+/// Where a due date lies relative to today in the local time zone. Classified
+/// here rather than through the date range of
+/// `predicateForIncompleteReminders`, which missed reminders without a time
+/// that are due today (#26).
+enum DueRelativeToToday {
+    case before, today, after
+}
+
+func dueRelativeToToday(_ dc: DateComponents?, now: Date) -> DueRelativeToToday? {
+    let startOfToday = gregorian.startOfDay(for: now)
+    let startOfTomorrow = gregorian.date(byAdding: .day, value: 1, to: startOfToday)!
+    let due: Date
+    if let day = dueDay(dc) {
+        // A day without a time is a local calendar day, whatever time zone
+        // the components carry.
+        guard let d = gregorian.date(
+            from: DateComponents(year: day.year, month: day.month, day: day.day)
+        ) else { return nil }
+        due = d
+    } else if let dc = dc, let d = gregorian.date(from: dc) {
+        due = d
+    } else {
+        return nil
+    }
+    if due < startOfToday { return .before }
+    if due < startOfTomorrow { return .today }
+    return .after
+}
+
+/// Set a parsed due date. A point in time also gets an alert at that time; a
+/// day without a time gets none, like one made in the Reminders app.
+func setDueDate(_ r: EKReminder, _ due: DueDate) {
+    switch due {
+    case .time(let d):
+        r.dueDateComponents = gregorian.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: d
+        )
+        r.addAlarm(EKAlarm(absoluteDate: d))
+    case .day(let comps):
+        r.dueDateComponents = comps
+    }
+}
+
+func invalidDueDateMessage(_ s: String) -> String {
+    return "Could not parse dueDate '\(s)'. Use ISO-8601 local time like 2026-04-11T18:00:00, with offset like 2026-04-11T18:00:00+02:00, or a date without a time like 2026-04-11."
+}
+
 // MARK: - Reminder serialisation -------------------------------------------
 
 /// Convert an EKReminder to a dictionary matching the skill's JSON schema.
@@ -164,8 +256,12 @@ func reminderDict(_ r: EKReminder) -> [String: Any] {
         "list": r.calendar?.title ?? NSNull(),
     ]
 
-    // Due date comes from dueDateComponents, not a Date directly.
-    if let dc = r.dueDateComponents, let d = Calendar.current.date(from: dc) {
+    // Due date comes from dueDateComponents, not a Date directly. A day
+    // without a time is reported as YYYY-MM-DD, the form create and update
+    // accept for it, so it does not read as a reminder due at midnight.
+    if let day = dueDay(r.dueDateComponents) {
+        dict["due_date"] = String(format: "%04d-%02d-%02d", day.year!, day.month!, day.day!)
+    } else if let dc = r.dueDateComponents, let d = gregorian.date(from: dc) {
         dict["due_date"] = isoFormatter.string(from: d)
     } else {
         dict["due_date"] = NSNull()
@@ -522,28 +618,27 @@ enum Command {
         return Json.ok(["reminders": hits.map(reminderDict)])
     }
 
-    static func getToday() -> String {
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: Date())
-        let end = cal.date(byAdding: .day, value: 1, to: start)!
-            .addingTimeInterval(-1)
+    /// All incomplete reminders whose due date lies `where` relative to
+    /// today, with or without a due time.
+    static func openReminders(due when: DueRelativeToToday) -> String {
         let pred = Store.shared.store.predicateForIncompleteReminders(
-            withDueDateStarting: start, ending: end, calendars: nil
+            withDueDateStarting: nil, ending: nil, calendars: nil
         )
-        let items = Store.shared.fetch(pred).map(reminderDict)
+        let now = Date()
+        let items = Store.shared.fetch(pred)
+            .filter { dueRelativeToToday($0.dueDateComponents, now: now) == when }
+            .map(reminderDict)
         return Json.ok(["reminders": items])
     }
 
+    static func getToday() -> String {
+        return openReminders(due: .today)
+    }
+
     static func getOverdue() -> String {
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: Date())
-        // ending at `start` means strictly before today 00:00.
-        let pred = Store.shared.store.predicateForIncompleteReminders(
-            withDueDateStarting: nil, ending: start.addingTimeInterval(-1),
-            calendars: nil
-        )
-        let items = Store.shared.fetch(pred).map(reminderDict)
-        return Json.ok(["reminders": items])
+        // Strictly before today 00:00: a reminder due earlier today is not
+        // overdue yet.
+        return openReminders(due: .before)
     }
 
     static func getScheduled() -> String {
@@ -612,19 +707,13 @@ enum Command {
         r.priority = priority
 
         if let dueStr = obj["dueDate"] as? String {
-            guard let d = parseDate(dueStr) else {
+            guard let due = parseDueDate(dueStr) else {
                 return Json.err(
                     code: "INVALID_PAYLOAD",
-                    message: "Could not parse dueDate '\(dueStr)'. Use ISO-8601 local time like 2026-04-11T18:00:00, or with offset like 2026-04-11T18:00:00+02:00."
+                    message: invalidDueDateMessage(dueStr)
                 )
             }
-            let comps = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute, .second],
-                from: d
-            )
-            r.dueDateComponents = comps
-            let alarm = EKAlarm(absoluteDate: d)
-            r.addAlarm(alarm)
+            setDueDate(r, due)
         }
 
         do {
@@ -681,22 +770,17 @@ enum Command {
                 for a in alarms { r.removeAlarm(a) }
             }
         } else if let dueStr = obj["dueDate"] as? String {
-            guard let d = parseDate(dueStr) else {
+            guard let due = parseDueDate(dueStr) else {
                 return Json.err(
                     code: "INVALID_PAYLOAD",
-                    message: "Could not parse dueDate '\(dueStr)'. Use ISO-8601 local time like 2026-04-11T18:00:00, or with offset like 2026-04-11T18:00:00+02:00."
+                    message: invalidDueDateMessage(dueStr)
                 )
             }
-            let comps = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute, .second],
-                from: d
-            )
-            r.dueDateComponents = comps
-            // Replace existing alarms with a single absolute-date one.
+            // Existing alarms belong to the old due date.
             if let alarms = r.alarms {
                 for a in alarms { r.removeAlarm(a) }
             }
-            r.addAlarm(EKAlarm(absoluteDate: d))
+            setDueDate(r, due)
         }
 
         do {

@@ -186,7 +186,8 @@ const TOOLS = [
       "Every tool returns {status: 'ok', data} or {status: 'error', code, message}. " +
       "Reminder objects carry `id`, `name` (the title), `body` (the notes), `due_date`, " +
       "`remind_me_date`, `completed`, `completion_date`, `priority` and `list`; dates are " +
-      "local time like 2026-04-11T18:00:00. `flagged` is always false because EventKit does " +
+      "local time like 2026-04-11T18:00:00, and a `due_date` without a time is a date only, " +
+      "like 2026-04-11. `flagged` is always false because EventKit does " +
       "not expose it. The first call can fail with WRAPPER_TIMEOUT while macOS shows the " +
       "Reminders permission prompt; retry once the user has answered it.",
     inputSchema: { type: "object", properties: {} },
@@ -255,7 +256,7 @@ const TOOLS = [
   {
     name: "get_today",
     description:
-      "Get all open reminders due today (local time) across every list.",
+      "Get all open reminders due today (local time) across every list, with or without a due time.",
     inputSchema: { type: "object", properties: {} },
     annotations: { title: "Get today's reminders", ...READ_ONLY },
   },
@@ -288,7 +289,7 @@ const TOOLS = [
   {
     name: "create_reminder",
     description:
-      "Create a new reminder in a specified list. Due date must be ISO-8601 local time (e.g. 2026-04-11T18:00:00) or omitted. Priority is 0 (none), 1 (high), 5 (medium), or 9 (low).",
+      "Create a new reminder in a specified list. Due date must be ISO-8601 local time (e.g. 2026-04-11T18:00:00), a date without a time (e.g. 2026-04-11), or omitted. A due time also sets an alert at that time; a date without a time sets none. Priority is 0 (none), 1 (high), 5 (medium), or 9 (low).",
     inputSchema: {
       type: "object",
       properties: {
@@ -304,7 +305,7 @@ const TOOLS = [
         dueDate: {
           type: "string",
           description:
-            "Optional ISO-8601 local-time due date, e.g. 2026-04-11T18:00:00",
+            "Optional due date: ISO-8601 local time like 2026-04-11T18:00:00, or YYYY-MM-DD like 2026-04-11 for a date without a time",
         },
         priority: {
           type: "integer",
@@ -333,7 +334,7 @@ const TOOLS = [
         dueDate: {
           type: "string",
           description:
-            "New ISO-8601 local-time due date; ignored when clearDueDate is true",
+            "New due date: ISO-8601 local time like 2026-04-11T18:00:00, or YYYY-MM-DD like 2026-04-11 for a date without a time. Replaces the existing alerts; ignored when clearDueDate is true",
         },
         clearDueDate: {
           type: "boolean",

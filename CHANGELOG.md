@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-19
+
+### Fixed
+- **`get_today` missed reminders due today without a time** ([#26](https://github.com/high5-ventures/apple-reminders-for-claude/issues/26)) — a reminder created in the Reminders app with a date but "Time" off was returned by `get_scheduled` but by neither `get_today` nor `get_overdue`. Both now classify every open reminder by its due date in the local time zone instead of relying on EventKit's due-date range, so such a reminder is due today on its day and overdue from the next day on.
+
+### Added
+- **Reminders without a due time** ([#26](https://github.com/high5-ventures/apple-reminders-for-claude/issues/26)) — `create_reminder` and `update_reminder` accept a `dueDate` without a time, such as `2026-04-11`. It sets only the date and no alert, like the Reminders app does; before, only a date with a time was accepted, and `2026-04-11T00:00:00` created a reminder due at midnight with an alert. Read results report such a reminder's `due_date` as `2026-04-11` instead of `2026-04-11T00:00:00`, which looked like midnight.
+
 ### Changed
 - **The binary is built with Xcode 27 on the project's own macOS runner** ([#27](https://github.com/high5-ventures/apple-reminders-for-claude/issues/27)) — `build.yml` and the release workflow moved from GitHub's `macos-14` to `macrunner`, a fresh macOS VM per job that carries only Xcode 27 (Swift 6.4, macOS 27 SDK). The binary stays universal (arm64 + x86_64) with a macOS 11 minimum; `build.sh` still refuses a slice that misses either. The Intel job stays on GitHub's `macos-15-intel`, the only runner that executes the x86_64 slice natively.
 

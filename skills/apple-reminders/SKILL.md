@@ -68,7 +68,7 @@ ${CLAUDE_SKILL_DIR}/bin/reminders-eventkit list-reminders "Reise und Freizeit" "
 
 **Disambiguating duplicate list names.** Multiple reminder lists can share the same title (common when you have both an iCloud "Personal" list and a local one). Every command that accepts a list name also accepts `id:<calendar_identifier>` — take the stable `calendar_identifier` from a prior `list-lists` call. If a plain title is ambiguous, the binary returns `LIST_AMBIGUOUS` with a `candidates` array listing each matching list's name, account, and `calendar_identifier`; surface the ambiguity to the user, pick the intended one, and retry with `id:...`.
 
-**Date format**: ISO-8601 local time, seconds precision, no timezone suffix: `2026-04-11T18:00:00`. The binary also accepts full ISO-8601 with a timezone offset (e.g. `2026-04-11T18:00:00+02:00`). Never pass natural-language date strings — parse those yourself first. If `dueDate` is present but unparseable, the binary returns `INVALID_PAYLOAD` rather than silently dropping the field.
+**Date format**: ISO-8601 local time, seconds precision, no timezone suffix: `2026-04-11T18:00:00`. The binary also accepts full ISO-8601 with a timezone offset (e.g. `2026-04-11T18:00:00+02:00`). For a reminder due on a day without a time, pass the date only: `2026-04-11`. It gets no alert, like one created in the Reminders app with "Time" off; a `dueDate` with a time also sets an alert at that time. Read results report such a reminder's `due_date` the same way, as `2026-04-11`. Never pass natural-language date strings — parse those yourself first. If `dueDate` is present but unparseable, the binary returns `INVALID_PAYLOAD` rather than silently dropping the field.
 
 ## Command catalog
 
@@ -99,7 +99,7 @@ ${CLAUDE_SKILL_DIR}/bin/reminders-eventkit list-reminders "Reise und Freizeit" "
   "list": "Groceries",                   // required
   "title": "Buy milk",                   // required
   "body": "organic, 1.5l",               // optional
-  "dueDate": "2026-04-11T18:00:00",      // optional, ISO-8601
+  "dueDate": "2026-04-11T18:00:00",      // optional, ISO-8601, or "2026-04-11" without a time
   "priority": 5                          // optional, one of 0|1|5|9, default 0
 }
 ```
@@ -111,7 +111,7 @@ ${CLAUDE_SKILL_DIR}/bin/reminders-eventkit list-reminders "Reise und Freizeit" "
   "id": "B769EAF1-7271-4EE7-B228-8A0FD6B65B47",  // required
   "title": "...",                        // optional, replaces
   "body": "...",                         // optional, replaces
-  "dueDate": "2026-04-11T18:00:00",      // optional, replaces
+  "dueDate": "2026-04-11T18:00:00",      // optional, replaces the due date and its alerts
   "clearDueDate": true,                  // optional, wipes due date explicitly
   "priority": 5                          // optional
 }
@@ -136,7 +136,7 @@ Use `clearDueDate: true` to distinguish "remove the due date" from "leave unchan
 }
 ```
 
-Optional fields are `null` when not set. Field names are stable — the skill and any downstream consumers can depend on them.
+Optional fields are `null` when not set. A `due_date` without a time is a date only, such as `"2026-04-11"`. Field names are stable — the skill and any downstream consumers can depend on them.
 
 ## Known limitations
 
