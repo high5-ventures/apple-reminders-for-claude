@@ -13,7 +13,9 @@ permissions:
 jobs:
   build:
     name: Build + validate (unsigned)
-    runs-on: macos-14
+    # Own Apple Silicon runner: a fresh macOS VM per job, Xcode 27 only (#27).
+    # ci-lint: allow-CI006  Fork-PR-Approval: all external contributors; ephemere VM pro Job
+    runs-on: macrunner
     timeout-minutes: 20
     steps:
       # actions/checkout@v6.0.2
@@ -22,6 +24,9 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
+
+      - name: Select Xcode 27
+        run: ./scripts/select-xcode.sh 27
 
       - name: Install MCPB CLI
         run: npm install -g @anthropic-ai/mcpb
