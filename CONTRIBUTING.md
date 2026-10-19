@@ -148,6 +148,12 @@ The `.github/workflows/release.yml` workflow then:
 8. Publishes the npm package `@high5ventures/apple-reminders-mcp`
 9. Publishes the MCP Registry entry `io.github.high5-ventures/apple-reminders`
 
+Steps 8 and 9 run in a second job on a GitHub-hosted Linux runner: npm accepts provenance only from GitHub-hosted runners. If that job fails after the GitHub Release exists, resume it without rebuilding:
+
+```bash
+gh workflow run release.yml --ref main -f tag=v1.1.0 -f publish_only=true
+```
+
 Only high5 ventures maintainers with access to the Apple Developer account and required GitHub Secrets can cut signed releases.
 
 ## License
