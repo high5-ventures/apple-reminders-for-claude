@@ -13,18 +13,27 @@ on:
         description: 'Publish the release. Set to false for a signed, notarized test build that is uploaded as a workflow artifact only — nothing reaches GitHub Releases, npm, or the MCP Registry.'
         type: boolean
         default: true
+      publish_only:
+        description: 'Skip the build and only publish to npm and the MCP Registry, for a tag whose GitHub Release already exists (resumes a release that failed after that step).'
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
   release:
-    name: Build, sign, notarize, publish
+    name: Build, sign, notarize, GitHub Release
+    # A tag push leaves inputs.publish_only unset, so it always builds.
+    if: inputs.publish_only != true
     # Own Apple Silicon runner: a fresh macOS VM per job, Xcode 27 only (#27).
     # ci-lint: allow-CI006  Fork-PR-Approval: all external contributors; ephemere VM pro Job
     runs-on: macrunner
     timeout-minutes: 60
+    permissions:
+      contents: write
+    outputs:
+      publish: ${{ steps.version.outputs.publish }}
 
     steps:
       # actions/checkout@v6.0.2
@@ -71,7 +80,6 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
 
       - name: Install MCPB CLI
         run: npm install -g @anthropic-ai/mcpb
@@ -188,13 +196,80 @@ jobs:
             dist/apple-reminders.mcpb
             dist/reminders-eventkit
 
-      - name: Stage npm-package with signed binary
-        if: steps.version.outputs.publish == 'true'
+      - name: Clean up keychain
+        if: always()
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          mkdir -p npm-package/bin
-          cp dist/reminders-eventkit npm-package/bin/reminders-eventkit
-          cd npm-package
-          npm install --no-audit --no-fund --ignore-scripts
+          security delete-keychain build.keychain-db || true
+
+  # npm accepts provenance only from GitHub-hosted runners: on macrunner the
+  # publish of v1.1.0 failed with E422 "Unsupported GitHub Actions runner
+  # environment: self-hosted". Nothing here needs macOS, so npm and the MCP
+  # Registry publish from Linux, after the GitHub Release the npm postinstall
+  # downloads the binary from.
+  publish:
+    name: Publish to npm and the MCP Registry
+    needs: release
+    if: >-
+      !cancelled() && (
+        (needs.release.result == 'success' && needs.release.outputs.publish == 'true')
+        || (needs.release.result == 'skipped' && inputs.publish_only == true)
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Trusted publishing to npm and the MCP Registry's github-oidc login.
+      id-token: write
+
+    steps:
+      - name: Derive release tag
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing tag=$TAG"
+
+      # The package is published from the tagged source, also when a resume is
+      # dispatched from main.
+      # actions/checkout@v6.0.2
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: refs/tags/${{ steps.version.outputs.tag }}
+
+      - name: Verify package version matches tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          for f in npm-package/package.json npm-package/server.json; do
+            jq -er --arg v "${TAG#v}" --arg f "$f" \
+              'if .version == $v then true else error("\($f) version \(.version) ≠ tag \($v)") end' "$f"
+          done
+
+      # The npm postinstall downloads the binary from this release; publishing
+      # without it ships a package that cannot install.
+      - name: GitHub Release carries the binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ASSETS=$(gh release view "${{ steps.version.outputs.tag }}" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name')
+          for asset in reminders-eventkit apple-reminders.mcpb; do
+            grep -qx "$asset" <<<"$ASSETS" \
+              || { echo "release ${{ steps.version.outputs.tag }} lacks $asset" >&2; exit 1; }
+          done
+
+      # actions/setup-node@v6.4.0
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
 
       # Trusted publishing: npm authenticates against this workflow's OIDC
       # identity (hence `id-token: write` above), so there is deliberately no
@@ -202,7 +277,6 @@ jobs:
       # repository and this workflow filename; renaming this file breaks
       # publishing until the configuration is updated to match.
       - name: Publish npm package
-        if: steps.version.outputs.publish == 'true'
         run: |
           # An npm older than 11.5.1 ignores OIDC and silently falls back to
           # token auth, which then fails as an unrelated-looking 404. Assert the
@@ -217,9 +291,6 @@ jobs:
           echo "publishing with npm $ACTUAL via OIDC"
 
           cd npm-package
-          # The published tarball must NOT include the local binary — end users
-          # download it via the postinstall script. Remove before pack.
-          rm -f bin/reminders-eventkit
 
           # npm versions are immutable, so re-running a release that got part
           # way through must not fail here. Publishing is the step most likely
@@ -236,7 +307,6 @@ jobs:
           npm publish --access public
 
       - name: Install mcp-publisher (pinned + checksum-verified)
-        if: steps.version.outputs.publish == 'true'
         run: |
           MCP_PUBLISHER_VERSION=v1.8.1
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -262,7 +332,6 @@ jobs:
           chmod +x "$RUNNER_TEMP/mcp-publisher"
 
       - name: Publish to MCP Registry
-        if: steps.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -288,10 +357,3 @@ jobs:
           done
           echo "npm still did not serve this version after 3 minutes" >&2
           exit 1
-
-      - name: Clean up keychain
-        if: always()
-        env:
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          security delete-keychain build.keychain-db || true
