@@ -104,7 +104,7 @@ node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/plugin.json"))'
 Runner time is spent where it pays off, so CI has two tiers:
 
 - **Every pull request** runs `ci.yml`: light checks on Linux, with no Swift build. It lints and cross-checks the manifests, parses the JavaScript and shell scripts, packs the npm tarball, and lists the server's tools over MCP. It only starts when a PR touches files those checks read.
-- **Everything that builds the binary** lives in `build.yml`: the universal build, signer checks and smoke tests on Apple Silicon, plus a second job on GitHub's Intel runner (`macos-15-intel`, available until August 2027) that builds natively and runs the binary through the Node server. It never runs on its own. `ci-batch.yml` runs it together with the light checks, by hand against `main` once several merges have landed, and only after a maintainer has approved the run:
+- **Everything that builds the binary** lives in `build.yml`: the universal build, signer checks and smoke tests on the project's own Apple Silicon runner (`macrunner`, a fresh macOS VM per job, Xcode 27), plus a second job on GitHub's Intel runner (`macos-15-intel`, available until August 2027) that builds natively and runs the binary through the Node server. It never runs on its own. `ci-batch.yml` runs it together with the light checks, by hand against `main` once several merges have landed, and only after a maintainer has approved the run:
 
   ```bash
   gh workflow run ci-batch.yml --ref main
@@ -138,7 +138,7 @@ git push origin v1.1.0
 
 The `.github/workflows/release.yml` workflow then:
 
-1. Builds the universal Swift binary (arm64 + x86_64) on `macos-14` and refuses to publish one that lacks either slice
+1. Builds the universal Swift binary (arm64 + x86_64) with Xcode 27 on `macrunner` and refuses to publish one that lacks either slice
 2. Imports the `Developer ID Application: high5 ventures GmbH` certificate from `APPLE_CERTIFICATE_P12_BASE64`
 3. Signs the binary with Hardened Runtime
 4. Packs the `.mcpb`

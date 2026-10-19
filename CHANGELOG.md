@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+- **The binary is built with Xcode 27 on the project's own macOS runner** ([#27](https://github.com/high5-ventures/apple-reminders-for-claude/issues/27)) — `build.yml` and the release workflow moved from GitHub's `macos-14` to `macrunner`, a fresh macOS VM per job that carries only Xcode 27 (Swift 6.4, macOS 27 SDK). The binary stays universal (arm64 + x86_64) with a macOS 11 minimum; `build.sh` still refuses a slice that misses either. The Intel job stays on GitHub's `macos-15-intel`, the only runner that executes the x86_64 slice natively.
+
 ## [1.0.5] — 2026-10-05
 
 Platform release. Every release up to and including v1.0.4 shipped a binary that only Apple Silicon Macs on macOS 14 or later could launch. If you are on an Intel Mac, or on macOS 11–13, this is the first version that runs for you.
