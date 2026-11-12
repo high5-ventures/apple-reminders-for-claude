@@ -147,8 +147,22 @@ jobs:
                      ('kTCCServiceReminders', '$RUNNER_TEMP/make-reminder-list', 1, 2, 4, 1),
                      ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);"
           done <<< "$DBS"
+          echo "$DBS" > "$RUNNER_TEMP/tcc-dbs"
+          dump() {
+            while IFS= read -r DB; do
+              sudo sqlite3 -header "$DB" "SELECT client, client_type, auth_value, auth_reason, auth_version,
+                length(csreq) AS csreq_len, flags, last_modified, pid, pid_version, boot_uuid, last_reminded
+                FROM access WHERE service = 'kTCCServiceReminders';" || true
+            done <<< "$DBS"
+          }
+          echo "== rows after insert"; dump
           REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
             | tee "$RUNNER_TEMP/lists.json"
+          echo "== rows after first call"; dump
+          sleep 3
+          echo "== second call"
+          REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists || true
+          echo "== rows after second call"; dump
           grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
 
       - name: Make sure a reminder list exists
@@ -167,6 +181,18 @@ jobs:
         run: |
           npm ci --no-audit --no-fund --ignore-scripts
           node test/eventkit-integration.mjs
+
+      - name: TCC diagnostics
+        if: failure()
+        run: |
+          [[ -f "$RUNNER_TEMP/tcc-dbs" ]] || exit 0
+          while IFS= read -r DB; do
+            sudo sqlite3 -header "$DB" "SELECT client, client_type, auth_value, auth_reason, auth_version,
+              length(csreq) AS csreq_len, flags, last_modified, boot_uuid FROM access WHERE service = 'kTCCServiceReminders';" || true
+          done < "$RUNNER_TEMP/tcc-dbs"
+          /usr/bin/log show --last 6m --style compact \
+            --predicate 'subsystem == "com.apple.TCC" AND (eventMessage CONTAINS[c] "Reminders" OR eventMessage CONTAINS[c] "reminders-eventkit")' \
+            | tail -150
 
   # Rosetta above only shows that the Intel slice launches. This job runs it on
   # Intel hardware, through EventKit up to the permission request, and through
