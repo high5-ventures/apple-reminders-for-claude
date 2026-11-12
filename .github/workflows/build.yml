@@ -121,6 +121,47 @@ jobs:
           echo "$OUTPUT" | grep -q '"code":"UNKNOWN_COMMAND"' \
             || { echo "x86_64 slice did not run" >&2; exit 1; }
 
+      # Everything above stops at the permission request. The job VMs run with
+      # SIP disabled, so the user's TCC database is writable: grant the binary
+      # Reminders access as clicking "Allow" would, by path and by the bundle
+      # identifier in its embedded Info.plist.
+      - name: Grant the binary Reminders access
+        run: |
+          csrutil status
+          DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+          sqlite3 "$DB" ".schema access"
+          sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
+            VALUES ('kTCCServiceReminders', '$GITHUB_WORKSPACE/dist/reminders-eventkit', 1, 2, 4, 1),
+                   ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);"
+          REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
+            | tee "$RUNNER_TEMP/lists.json"
+          grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
+
+      # A fresh store may have no list yet; the Reminders app creates its
+      # default one on first launch.
+      - name: Make sure a reminder list exists
+        run: |
+          if grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json"; then
+            open -g -a Reminders
+            for _ in $(seq 1 30); do
+              sleep 2
+              ./dist/reminders-eventkit list-lists > "$RUNNER_TEMP/lists.json"
+              grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json" || break
+            done
+            pkill -x Reminders || true
+          fi
+          cat "$RUNNER_TEMP/lists.json"
+          ! grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json"
+
+      - name: Reminders round trip through EventKit (#31)
+        working-directory: npm-package
+        env:
+          REMINDERS_BINARY: ${{ github.workspace }}/dist/reminders-eventkit
+          REMINDERS_TCC_TIMEOUT_SECONDS: 10
+        run: |
+          npm ci --no-audit --no-fund --ignore-scripts
+          node test/eventkit-integration.mjs
+
   # Rosetta above only shows that the Intel slice launches. This job runs it on
   # Intel hardware, through EventKit up to the permission request, and through
   # the path that failed in #21: the Node server spawning the binary.

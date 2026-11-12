@@ -175,6 +175,94 @@ const REMINDER_ID = {
   description: "EventKit UUID: the `id` field of any reminder result",
 };
 
+// The binary validates the rule (parseRecurrence in the Swift source); this
+// schema only tells the model its shape. Read results report a rule in the
+// same shape, so it can be passed back unchanged.
+const WEEKDAYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
+const INT_LIST = (what) => ({
+  type: "array",
+  items: { type: "integer" },
+  description: what,
+});
+const RECURRENCE = {
+  type: "object",
+  description:
+    "Makes the reminder repeat, like Repeat in the Reminders app. Needs a dueDate, which is the first occurrence. " +
+    "Examples: every weekday {frequency: 'weekly', daysOfWeek: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']}; " +
+    "every other week {frequency: 'weekly', interval: 2}; last Friday of each month " +
+    "{frequency: 'monthly', daysOfWeek: [{day: 'friday', week: -1}]}; last day of each month " +
+    "{frequency: 'monthly', daysOfMonth: [-1]}.",
+  properties: {
+    frequency: {
+      type: "string",
+      enum: ["daily", "weekly", "monthly", "yearly"],
+      description: "The unit it repeats in",
+    },
+    interval: {
+      type: "integer",
+      minimum: 1,
+      default: 1,
+      description: "Repeat every N units (default 1)",
+    },
+    daysOfWeek: {
+      type: "array",
+      items: {
+        anyOf: [
+          { type: "string", enum: WEEKDAYS },
+          {
+            type: "object",
+            properties: {
+              day: { type: "string", enum: WEEKDAYS },
+              week: {
+                type: "integer",
+                description:
+                  "The nth such weekday of the month (1 to 5) or year (1 to 53); -1 is the last",
+              },
+            },
+            required: ["day"],
+            additionalProperties: false,
+          },
+        ],
+      },
+      description:
+        "Weekly, monthly or yearly: the weekdays it falls on; the object form picks the nth weekday (monthly or yearly)",
+    },
+    daysOfMonth: INT_LIST("Monthly: days 1 to 31; -1 is the last day"),
+    monthsOfYear: INT_LIST("Yearly: months 1 to 12"),
+    weeksOfYear: INT_LIST("Yearly: weeks 1 to 53; -1 is the last"),
+    daysOfYear: INT_LIST("Yearly: days 1 to 366; -1 is the last"),
+    setPositions: INT_LIST(
+      "Keeps only the nth of the days the other lists give per period; -1 is the last. " +
+        "Last weekday of the month: frequency monthly, daysOfWeek monday to friday, setPositions [-1]"
+    ),
+    end: {
+      type: "object",
+      description:
+        "When it stops repeating; omit to repeat forever. {date: '2026-12-31'} repeats through that day, " +
+        "{count: 10} stops after 10 occurrences.",
+      properties: {
+        date: {
+          type: "string",
+          description:
+            "YYYY-MM-DD, or ISO-8601 local time like 2026-12-31T18:00:00 to stop at that moment",
+        },
+        count: { type: "integer", minimum: 1 },
+      },
+      additionalProperties: false,
+    },
+  },
+  required: ["frequency"],
+  additionalProperties: false,
+};
+
 const TOOLS = [
   {
     name: "get_lists",
@@ -185,7 +273,8 @@ const TOOLS = [
       // The contract every tool shares, stated once.
       "Every tool returns {status: 'ok', data} or {status: 'error', code, message}. " +
       "Reminder objects carry `id`, `name` (the title), `body` (the notes), `due_date`, " +
-      "`remind_me_date`, `completed`, `completion_date`, `priority` and `list`; dates are " +
+      "`remind_me_date`, `completed`, `completion_date`, `priority`, `list` and `recurrence` " +
+      "(null, or the repeat rule in the form create_reminder takes); dates are " +
       "local time like 2026-04-11T18:00:00, and a `due_date` without a time is a date only, " +
       "like 2026-04-11. `flagged` is always false because EventKit does " +
       "not expose it. The first call can fail with WRAPPER_TIMEOUT while macOS shows the " +
@@ -289,7 +378,7 @@ const TOOLS = [
   {
     name: "create_reminder",
     description:
-      "Create a new reminder in a specified list. Due date must be ISO-8601 local time (e.g. 2026-04-11T18:00:00), a date without a time (e.g. 2026-04-11), or omitted. A due time also sets an alert at that time; a date without a time sets none. Priority is 0 (none), 1 (high), 5 (medium), or 9 (low).",
+      "Create a new reminder in a specified list. Due date must be ISO-8601 local time (e.g. 2026-04-11T18:00:00), a date without a time (e.g. 2026-04-11), or omitted. A due time also sets an alert at that time; a date without a time sets none. Priority is 0 (none), 1 (high), 5 (medium), or 9 (low). `recurrence` makes it repeat and needs a due date.",
     inputSchema: {
       type: "object",
       properties: {
@@ -313,6 +402,7 @@ const TOOLS = [
           default: 0,
           description: "0=none, 1=high, 5=medium, 9=low",
         },
+        recurrence: RECURRENCE,
       },
       required: ["list", "title"],
     },
@@ -321,7 +411,7 @@ const TOOLS = [
   {
     name: "update_reminder",
     description:
-      "Update an existing reminder by ID. Only provided fields are changed. Use `clearDueDate: true` to explicitly remove a due date (different from omitting `dueDate`).",
+      "Update an existing reminder by ID. Only provided fields are changed. Use `clearDueDate: true` to explicitly remove a due date (different from omitting `dueDate`). `recurrence` replaces the repeat rule and `clearRecurrence: true` stops the reminder repeating; a repeating reminder keeps needing a due date, so removing the due date of one takes `clearRecurrence: true` as well.",
     inputSchema: {
       type: "object",
       properties: {
@@ -344,6 +434,14 @@ const TOOLS = [
           type: "integer",
           enum: [0, 1, 5, 9],
           description: "0=none, 1=high, 5=medium, 9=low",
+        },
+        recurrence: {
+          ...RECURRENCE,
+          description: "New repeat rule; replaces the existing one. " + RECURRENCE.description,
+        },
+        clearRecurrence: {
+          type: "boolean",
+          description: "If true, stop the reminder repeating",
         },
       },
       required: ["id"],
@@ -469,6 +567,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (typeof args.body === "string") payload.body = args.body;
         if (typeof args.dueDate === "string") payload.dueDate = args.dueDate;
         if (typeof args.priority === "number") payload.priority = args.priority;
+        if (args.recurrence != null) payload.recurrence = args.recurrence;
         // Pass the JSON payload over stdin so user content never appears on
         // the command line. The Swift binary reads stdin when it sees `-`.
         return envelopeToMcpResult(
@@ -486,6 +585,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (typeof args.dueDate === "string") payload.dueDate = args.dueDate;
         if (args.clearDueDate === true) payload.clearDueDate = true;
         if (typeof args.priority === "number") payload.priority = args.priority;
+        if (args.recurrence != null) payload.recurrence = args.recurrence;
+        if (args.clearRecurrence === true) payload.clearRecurrence = true;
         return envelopeToMcpResult(
           await runBinary(["update-reminder", "-"], {
             stdin: JSON.stringify(payload),
