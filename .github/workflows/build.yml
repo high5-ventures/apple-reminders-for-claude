@@ -121,35 +121,40 @@ jobs:
           echo "$OUTPUT" | grep -q '"code":"UNKNOWN_COMMAND"' \
             || { echo "x86_64 slice did not run" >&2; exit 1; }
 
+      # A fresh store has no list, and the binary cannot create one: a small
+      # EventKit helper does, without the Reminders app (driving the app via
+      # osascript waits on an Automation prompt nobody answers).
+      - name: Build the list helper
+        run: |
+          /usr/bin/swiftc npm-package/test/make-reminder-list.swift \
+            -o "$RUNNER_TEMP/make-reminder-list" \
+            -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker src/Info.plist
+
       # Everything above stops at the permission request. The job VMs run with
-      # SIP disabled, so TCC's databases are writable: grant the binary
-      # Reminders access as clicking "Allow" would, by path and by the bundle
-      # identifier in its embedded Info.plist. On macOS 27 the user's tccd
-      # reads these grants from a database in a ProtectedSystem container; a
-      # row in ~/Library/Application Support/com.apple.TCC/TCC.db has no effect.
-      - name: Grant the binary Reminders access
+      # SIP disabled, so TCC's databases are writable: grant Reminders access
+      # by path, as clicking "Allow" would. On macOS 27 the user's tccd reads
+      # these grants from a database in a ProtectedSystem container; a row in
+      # ~/Library/Application Support/com.apple.TCC/TCC.db has no effect.
+      - name: Grant Reminders access
         run: |
           csrutil status | grep -q disabled
-          BIN="$GITHUB_WORKSPACE/dist/reminders-eventkit"
           DBS=$(sudo find /private/var/containers/Data/ProtectedSystem \
             -path '*/Library/Application Support/com.apple.TCC/TCC.db' 2>/dev/null)
           [[ -n "$DBS" ]] || { echo "no TCC database in a ProtectedSystem container" >&2; exit 1; }
           while IFS= read -r DB; do
             sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
-              VALUES ('kTCCServiceReminders', '$BIN', 1, 2, 4, 1),
+              VALUES ('kTCCServiceReminders', '$GITHUB_WORKSPACE/dist/reminders-eventkit', 1, 2, 4, 1),
+                     ('kTCCServiceReminders', '$RUNNER_TEMP/make-reminder-list', 1, 2, 4, 1),
                      ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);"
           done <<< "$DBS"
           REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
             | tee "$RUNNER_TEMP/lists.json"
           grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
 
-      # A fresh store has no list. The binary cannot create one, so the
-      # Reminders app does (the image lets osascript send it Apple Events).
       - name: Make sure a reminder list exists
         run: |
           if grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json"; then
-            perl -e 'alarm 120; exec @ARGV' osascript \
-              -e 'tell application "Reminders" to make new list with properties {name:"CI"}'
+            perl -e 'alarm 60; exec @ARGV' "$RUNNER_TEMP/make-reminder-list" CI
             ./dist/reminders-eventkit list-lists | tee "$RUNNER_TEMP/lists.json"
           fi
           ! grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json"
