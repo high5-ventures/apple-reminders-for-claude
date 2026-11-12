@@ -124,62 +124,34 @@ jobs:
       # Everything above stops at the permission request. The job VMs run with
       # SIP disabled, so TCC's databases are writable: grant the binary
       # Reminders access as clicking "Allow" would, by path and by the bundle
-      # identifier in its embedded Info.plist. Reminders is a per-user service,
-      # read from the user's database, which a fresh VM does not have yet; it
-      # gets the schema of the system database, and the user's tccd restarts
-      # to open it.
+      # identifier in its embedded Info.plist. On macOS 27 the user's tccd
+      # reads these grants from a database in a ProtectedSystem container; a
+      # row in ~/Library/Application Support/com.apple.TCC/TCC.db has no effect.
       - name: Grant the binary Reminders access
         run: |
-          csrutil status
-          SYSTEM_DB="/Library/Application Support/com.apple.TCC/TCC.db"
-          USER_DIR="$HOME/Library/Application Support/com.apple.TCC"
+          csrutil status | grep -q disabled
           BIN="$GITHUB_WORKSPACE/dist/reminders-eventkit"
-          mkdir -p "$USER_DIR"
-          if [[ ! -s "$USER_DIR/TCC.db" ]]; then
-            # The system database's schema and version row, without its grants.
-            sudo cp "$SYSTEM_DB" "$USER_DIR/TCC.db"
-            sudo chown "$(id -un)" "$USER_DIR/TCC.db"
-            sqlite3 "$USER_DIR/TCC.db" "DELETE FROM access;"
-          fi
-          # Besides the home directory, macOS 27 keeps a TCC database in a
-          # ProtectedSystem container.
-          { echo "$USER_DIR/TCC.db"
-            sudo find /private/var/containers/Data/ProtectedSystem -path '*/com.apple.TCC/TCC.db' 2>/dev/null
-          } > "$RUNNER_TEMP/tcc-dbs.txt"
+          DBS=$(sudo find /private/var/containers/Data/ProtectedSystem \
+            -path '*/Library/Application Support/com.apple.TCC/TCC.db' 2>/dev/null)
+          [[ -n "$DBS" ]] || { echo "no TCC database in a ProtectedSystem container" >&2; exit 1; }
           while IFS= read -r DB; do
-            echo "== $DB"
-            sudo ls -l "$DB"
             sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
               VALUES ('kTCCServiceReminders', '$BIN', 1, 2, 4, 1),
-                     ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);" || true
-            sudo sqlite3 "$DB" "SELECT * FROM admin; SELECT service, client, auth_value FROM access;" || true
-          done < "$RUNNER_TEMP/tcc-dbs.txt"
-          launchctl print "gui/$(id -u)/com.apple.tccd" | head -5 || true
-          launchctl kickstart -k "gui/$(id -u)/com.apple.tccd" || true
-          sleep 2
+                     ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);"
+          done <<< "$DBS"
           REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
             | tee "$RUNNER_TEMP/lists.json"
-          grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json" || {
-            sudo find / -xdev -name TCC.db 2>/dev/null
-            for pid in $(pgrep tccd); do ps -o pid,user,command -p "$pid"; sudo lsof -p "$pid" | grep -i '\.db' || true; done
-            log show --last 2m --info --predicate 'process == "tccd"' | grep -iE "AUTHREQ_RESULT|DB Action|TCC.db|access.*error|version" | tail -40
-            exit 1
-          }
+          grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
 
-      # A fresh store may have no list yet; the Reminders app creates its
-      # default one on first launch.
+      # A fresh store has no list. The binary cannot create one, so the
+      # Reminders app does (the image lets osascript send it Apple Events).
       - name: Make sure a reminder list exists
         run: |
           if grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json"; then
-            open -g -a Reminders
-            for _ in $(seq 1 30); do
-              sleep 2
-              ./dist/reminders-eventkit list-lists > "$RUNNER_TEMP/lists.json"
-              grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json" || break
-            done
-            pkill -x Reminders || true
+            perl -e 'alarm 120; exec @ARGV' osascript \
+              -e 'tell application "Reminders" to make new list with properties {name:"CI"}'
+            ./dist/reminders-eventkit list-lists | tee "$RUNNER_TEMP/lists.json"
           fi
-          cat "$RUNNER_TEMP/lists.json"
           ! grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json"
 
       - name: Reminders round trip through EventKit (#31)
