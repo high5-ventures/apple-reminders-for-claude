@@ -130,15 +130,23 @@ jobs:
             -o "$RUNNER_TEMP/make-reminder-list" \
             -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker npm-package/test/make-reminder-list.Info.plist
 
+      # tccd checks a grant's code requirement against the whole executable.
+      # The linker ad-hoc signs only the arm64 slice, so against
+      # dist/reminders-eventkit every requirement fails ("Failed to match
+      # existing code requirement") and only the first call, before tccd has
+      # stored one, gets access. The test runs a copy signed in all slices.
+      - name: Sign a test copy of the binary
+        run: |
+          cp dist/reminders-eventkit "$RUNNER_TEMP/reminders-eventkit"
+          codesign --force --sign - "$RUNNER_TEMP/reminders-eventkit"
+          codesign --verify --all-architectures "$RUNNER_TEMP/reminders-eventkit"
+
       # Everything above stops at the permission request. The job VMs run with
       # SIP disabled, so TCC's databases are writable: grant Reminders access
-      # by path, as clicking "Allow" would. On macOS 27 the user's tccd reads
-      # these grants from a database in a ProtectedSystem container; a row in
+      # by path with a code requirement, as clicking "Allow" would. On macOS
+      # 27 the user's tccd reads these grants from a database in a
+      # ProtectedSystem container; a row in
       # ~/Library/Application Support/com.apple.TCC/TCC.db has no effect.
-      # Each row carries a code requirement. Without one, tccd stores its own
-      # on first use, and for this ad-hoc signed universal binary that one
-      # never matches again ("Failed to match existing code requirement"), so
-      # only the first call would get access.
       - name: Grant Reminders access
         run: |
           csrutil status | grep -q disabled
@@ -152,9 +160,8 @@ jobs:
             csreq -r "=$1" -b "$RUNNER_TEMP/req.bin"
             xxd -p "$RUNNER_TEMP/req.bin" | tr -d '\n'
           }
-          BIN="$GITHUB_WORKSPACE/dist/reminders-eventkit"
+          BIN="$RUNNER_TEMP/reminders-eventkit"
           HELPER="$RUNNER_TEMP/make-reminder-list"
-          # The slice that runs here; each slice has its own identifier.
           ID=$(identifier -a "$(uname -m)" "$BIN")
           [[ -n "$ID" ]] || { echo "no code signing identifier in the $(uname -m) slice" >&2; exit 1; }
           BIN_REQ=$(requirement "identifier \"$ID\"")
@@ -165,7 +172,7 @@ jobs:
                      ('kTCCServiceReminders', '$HELPER', 1, 2, 4, 1, X'$HELPER_REQ');"
           done <<< "$DBS"
           for _ in 1 2; do
-            REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
+            REMINDERS_TCC_TIMEOUT_SECONDS=10 "$BIN" list-lists \
               | tee "$RUNNER_TEMP/lists.json"
             grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
           done
@@ -174,14 +181,14 @@ jobs:
         run: |
           if grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json"; then
             perl -e 'alarm 60; exec @ARGV' "$RUNNER_TEMP/make-reminder-list" CI
-            ./dist/reminders-eventkit list-lists | tee "$RUNNER_TEMP/lists.json"
+            "$RUNNER_TEMP/reminders-eventkit" list-lists | tee "$RUNNER_TEMP/lists.json"
           fi
           ! grep -q '"lists":\[\]' "$RUNNER_TEMP/lists.json"
 
       - name: Reminders round trip through EventKit (#31)
         working-directory: npm-package
         env:
-          REMINDERS_BINARY: ${{ github.workspace }}/dist/reminders-eventkit
+          REMINDERS_BINARY: ${{ runner.temp }}/reminders-eventkit
           REMINDERS_TCC_TIMEOUT_SECONDS: 10
         run: |
           npm ci --no-audit --no-fund --ignore-scripts
