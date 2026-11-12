@@ -135,35 +135,43 @@ jobs:
       # by path, as clicking "Allow" would. On macOS 27 the user's tccd reads
       # these grants from a database in a ProtectedSystem container; a row in
       # ~/Library/Application Support/com.apple.TCC/TCC.db has no effect.
+      # Each row carries a code requirement. Without one, tccd stores its own
+      # on first use, and for the ad-hoc signed universal binary that one
+      # never matches again ("Failed to match existing code requirement"), so
+      # only the first call would get access.
       - name: Grant Reminders access
         run: |
           csrutil status | grep -q disabled
           DBS=$(sudo find /private/var/containers/Data/ProtectedSystem \
             -path '*/Library/Application Support/com.apple.TCC/TCC.db' 2>/dev/null)
           [[ -n "$DBS" ]] || { echo "no TCC database in a ProtectedSystem container" >&2; exit 1; }
-          while IFS= read -r DB; do
-            sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
-              VALUES ('kTCCServiceReminders', '$GITHUB_WORKSPACE/dist/reminders-eventkit', 1, 2, 4, 1),
-                     ('kTCCServiceReminders', '$RUNNER_TEMP/make-reminder-list', 1, 2, 4, 1),
-                     ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);"
-          done <<< "$DBS"
           echo "$DBS" > "$RUNNER_TEMP/tcc-dbs"
-          dump() {
-            while IFS= read -r DB; do
-              sudo sqlite3 -header "$DB" "SELECT client, client_type, auth_value, auth_reason, auth_version,
-                length(csreq) AS csreq_len, flags, last_modified, pid, pid_version, boot_uuid, last_reminded
-                FROM access WHERE service = 'kTCCServiceReminders';" || true
-            done <<< "$DBS"
+          identifier() { codesign -d "$@" 2>&1 | sed -n 's/^Identifier=//p'; }
+          requirement() {
+            echo "requirement: $1" >&2
+            csreq -r "=$1" -b "$RUNNER_TEMP/req.bin"
+            xxd -p "$RUNNER_TEMP/req.bin" | tr -d '\n'
           }
-          echo "== rows after insert"; dump
-          REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
-            | tee "$RUNNER_TEMP/lists.json"
-          echo "== rows after first call"; dump
-          sleep 3
-          echo "== second call"
-          REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists || true
-          echo "== rows after second call"; dump
-          grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
+          BIN="$GITHUB_WORKSPACE/dist/reminders-eventkit"
+          HELPER="$RUNNER_TEMP/make-reminder-list"
+          BIN_REQ=""
+          for ARCH in $(lipo -archs "$BIN"); do
+            ID=$(identifier -a "$ARCH" "$BIN")
+            [[ -n "$ID" ]] || { echo "no code signing identifier in the $ARCH slice" >&2; exit 1; }
+            BIN_REQ="${BIN_REQ:+$BIN_REQ or }identifier \"$ID\""
+          done
+          BIN_REQ=$(requirement "$BIN_REQ")
+          HELPER_REQ=$(requirement "identifier \"$(identifier "$HELPER")\"")
+          while IFS= read -r DB; do
+            sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq)
+              VALUES ('kTCCServiceReminders', '$BIN', 1, 2, 4, 1, X'$BIN_REQ'),
+                     ('kTCCServiceReminders', '$HELPER', 1, 2, 4, 1, X'$HELPER_REQ');"
+          done <<< "$DBS"
+          for _ in 1 2; do
+            REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
+              | tee "$RUNNER_TEMP/lists.json"
+            grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
+          done
 
       - name: Make sure a reminder list exists
         run: |
@@ -187,8 +195,11 @@ jobs:
         run: |
           [[ -f "$RUNNER_TEMP/tcc-dbs" ]] || exit 0
           while IFS= read -r DB; do
-            sudo sqlite3 -header "$DB" "SELECT client, client_type, auth_value, auth_reason, auth_version,
-              length(csreq) AS csreq_len, flags, last_modified, boot_uuid FROM access WHERE service = 'kTCCServiceReminders';" || true
+            sudo sqlite3 "$DB" "SELECT client, auth_value, hex(csreq) FROM access WHERE service = 'kTCCServiceReminders';" \
+              | while IFS='|' read -r CLIENT AUTH REQ; do
+                  echo "$REQ" | xxd -r -p > "$RUNNER_TEMP/stored-req.bin"
+                  echo "$CLIENT auth_value=$AUTH requirement: $(csreq -r "$RUNNER_TEMP/stored-req.bin" -t 2>&1)"
+                done
           done < "$RUNNER_TEMP/tcc-dbs"
           /usr/bin/log show --last 6m --style compact \
             --predicate 'subsystem == "com.apple.TCC" AND (eventMessage CONTAINS[c] "Reminders" OR eventMessage CONTAINS[c] "reminders-eventkit")' \
