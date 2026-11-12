@@ -133,26 +133,27 @@ jobs:
           csrutil status
           SYSTEM_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           USER_DIR="$HOME/Library/Application Support/com.apple.TCC"
-          USER_DB="$USER_DIR/TCC.db"
           BIN="$GITHUB_WORKSPACE/dist/reminders-eventkit"
           mkdir -p "$USER_DIR"
-          if [[ ! -s "$USER_DB" ]]; then
+          if [[ ! -s "$USER_DIR/TCC.db" ]]; then
             # The system database's schema and version row, without its grants.
-            sudo cp "$SYSTEM_DB" "$USER_DB"
-            sudo chown "$(id -un)" "$USER_DB"
-            sqlite3 "$USER_DB" "DELETE FROM access;"
+            sudo cp "$SYSTEM_DB" "$USER_DIR/TCC.db"
+            sudo chown "$(id -un)" "$USER_DIR/TCC.db"
+            sqlite3 "$USER_DIR/TCC.db" "DELETE FROM access;"
           fi
-          # tccd checks the stored code requirement against the binary.
-          REQ=$(codesign -d -r- "$BIN" 2>&1 | sed -n 's/^designated => //p')
-          echo "requirement: $REQ"
-          CSREQ=NULL
-          if [[ -n "$REQ" ]] && echo "$REQ" | csreq -r- -b "$RUNNER_TEMP/csreq.bin"; then
-            CSREQ="X'$(xxd -p "$RUNNER_TEMP/csreq.bin" | tr -d '\n')'"
-          fi
-          sqlite3 "$USER_DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq)
-            VALUES ('kTCCServiceReminders', '$BIN', 1, 2, 4, 1, $CSREQ),
-                   ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1, NULL);"
-          sqlite3 "$USER_DB" "SELECT * FROM admin; SELECT service, client, auth_value, length(csreq) FROM access;"
+          # Besides the home directory, macOS 27 keeps a TCC database in a
+          # ProtectedSystem container.
+          { echo "$USER_DIR/TCC.db"
+            sudo find /private/var/containers/Data/ProtectedSystem -path '*/com.apple.TCC/TCC.db' 2>/dev/null
+          } > "$RUNNER_TEMP/tcc-dbs.txt"
+          while IFS= read -r DB; do
+            echo "== $DB"
+            sudo ls -l "$DB"
+            sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
+              VALUES ('kTCCServiceReminders', '$BIN', 1, 2, 4, 1),
+                     ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);" || true
+            sudo sqlite3 "$DB" "SELECT * FROM admin; SELECT service, client, auth_value FROM access;" || true
+          done < "$RUNNER_TEMP/tcc-dbs.txt"
           launchctl print "gui/$(id -u)/com.apple.tccd" | head -5 || true
           launchctl kickstart -k "gui/$(id -u)/com.apple.tccd" || true
           sleep 2
@@ -160,7 +161,7 @@ jobs:
             | tee "$RUNNER_TEMP/lists.json"
           grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json" || {
             sudo find / -xdev -name TCC.db 2>/dev/null
-            for pid in $(pgrep -x tccd); do ps -o pid,user,command -p "$pid"; sudo lsof -p "$pid" | grep -i '\.db' || true; done
+            for pid in $(pgrep tccd); do ps -o pid,user,command -p "$pid"; sudo lsof -p "$pid" | grep -i '\.db' || true; done
             log show --last 2m --info --predicate 'process == "tccd"' | grep -iE "AUTHREQ_RESULT|DB Action|TCC.db|access.*error|version" | tail -40
             exit 1
           }
