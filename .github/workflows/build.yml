@@ -136,8 +136,8 @@ jobs:
       # these grants from a database in a ProtectedSystem container; a row in
       # ~/Library/Application Support/com.apple.TCC/TCC.db has no effect.
       # Each row carries a code requirement. Without one, tccd stores its own
-      # on first use, and for the ad-hoc signed universal binary that one
-      # never matches again ("Failed to match existing code requirement"), so
+      # on first use, and for the universal binary, ad-hoc signed only in its
+      # arm64 slice, that one never matches again ("Failed to match existing code requirement"), so
       # only the first call would get access.
       - name: Grant Reminders access
         run: |
@@ -154,13 +154,11 @@ jobs:
           }
           BIN="$GITHUB_WORKSPACE/dist/reminders-eventkit"
           HELPER="$RUNNER_TEMP/make-reminder-list"
-          BIN_REQ=""
-          for ARCH in $(lipo -archs "$BIN"); do
-            ID=$(identifier -a "$ARCH" "$BIN")
-            [[ -n "$ID" ]] || { echo "no code signing identifier in the $ARCH slice" >&2; exit 1; }
-            BIN_REQ="${BIN_REQ:+$BIN_REQ or }identifier \"$ID\""
-          done
-          BIN_REQ=$(requirement "$BIN_REQ")
+          # Only the slice that runs here: the linker ad-hoc signs arm64
+          # slices only, so the x86_64 slice has no identifier.
+          ID=$(identifier -a "$(uname -m)" "$BIN")
+          [[ -n "$ID" ]] || { echo "no code signing identifier in the $(uname -m) slice" >&2; exit 1; }
+          BIN_REQ=$(requirement "identifier \"$ID\"")
           HELPER_REQ=$(requirement "identifier \"$(identifier "$HELPER")\"")
           while IFS= read -r DB; do
             sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq)
