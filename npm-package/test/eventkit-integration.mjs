@@ -4,7 +4,7 @@
 // Drives the MCP server and the real binary against a real Reminders store:
 // every call goes through EventKit and is read back from the store by a fresh
 // process. Needs Reminders access for the binary and at least one list;
-// build.yml grants the access on a CI VM and makes sure a list exists.
+// build.yml grants the access on a CI VM, whose store has the default list.
 //
 //   REMINDERS_BINARY=$PWD/../dist/reminders-eventkit node test/eventkit-integration.mjs
 //
@@ -201,18 +201,26 @@ if (u) {
   check(cleared.due_date === null && cleared.recurrence === null, "due date and rule are gone", cleared);
 }
 
-// --- Completing a repeating reminder (observed, not yet asserted) ----------
+// --- Completing a repeating reminder ---------------------------------------
+// The reminder moves on to its next occurrence and stays open under the same
+// id; EventKit keeps the finished occurrence as a separate completed copy.
 
 const c = await created(
   { dueDate: `${tomorrow}T09:00:00`, recurrence: { frequency: "daily" } },
   "complete daily"
 );
 if (c) {
-  const done = await call("complete_reminder", { id: c.id });
-  console.log("OBSERVE complete_reminder result:", JSON.stringify(done));
-  console.log("OBSERVE get_reminder after:", JSON.stringify(await stored(c.id)));
-  const siblings = (await mine()).filter((r) => r.name === c.name);
-  console.log("OBSERVE reminders with the same title:", JSON.stringify(siblings));
+  const done = okData(await call("complete_reminder", { id: c.id }), "complete a repeating reminder");
+  const next = { id: c.id, completed: false, due_date: `${day(2)}T09:00:00`, recurrence: { frequency: "daily", interval: 1 } };
+  const pick = (r) => r && { id: r.id, completed: r.completed, due_date: r.due_date, recurrence: r.recurrence };
+  same(pick(done?.reminder), next, "completing returns the next occurrence, still open");
+  same(pick(await stored(c.id)), next, "the store keeps the reminder open at its next occurrence");
+  const copies = (await mine()).filter((r) => r.name === c.name && r.id !== c.id);
+  same(
+    copies.map((r) => ({ completed: r.completed, due_date: r.due_date, recurrence: r.recurrence })),
+    [{ completed: true, due_date: `${tomorrow}T09:00:00`, recurrence: null }],
+    "the finished occurrence is kept as a completed copy without the rule"
+  );
 }
 
 // --- Clean up ---------------------------------------------------------------

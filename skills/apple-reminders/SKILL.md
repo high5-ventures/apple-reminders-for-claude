@@ -159,6 +159,8 @@ Common rules:
 
 An `end.date` without a time includes that whole day. Unknown fields, values out of range and lists that do not fit the frequency return `INVALID_PAYLOAD` with the reason; nothing is saved.
 
+`complete-reminder` on a repeating reminder does not close it, as in the Reminders app: the reminder stays open under the same `id`, its `due_date` (and alarm) moves to the next occurrence, and the store keeps the finished occurrence as a separate completed reminder with `recurrence: null`. Every call completes one more occurrence, so never repeat it to "make sure". To end the series, `update-reminder` with `clearRecurrence: true` first, then complete it.
+
 ### Reminder schema (returned by every read function)
 
 ```json

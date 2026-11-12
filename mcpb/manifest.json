@@ -64,7 +64,7 @@
     },
     {
       "name": "complete_reminder",
-      "description": "Mark a reminder as completed."
+      "description": "Mark a reminder as completed; a repeating one moves on to its next occurrence."
     },
     {
       "name": "uncomplete_reminder",

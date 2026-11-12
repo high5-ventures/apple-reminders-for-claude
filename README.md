@@ -234,7 +234,7 @@ All 13 tools return a stable JSON envelope — `{ "status": "ok", "data": ... }`
 | `get_reminder` | read-only | Fetch one reminder by ID |
 | `create_reminder` | additive | Create a new reminder, optionally repeating |
 | `update_reminder` | destructive, idempotent | Update an existing reminder, including its repeat rule |
-| `complete_reminder` | destructive, idempotent | Mark as completed |
+| `complete_reminder` | destructive | Mark as completed; a repeating reminder moves on to its next occurrence |
 | `uncomplete_reminder` | destructive, idempotent | Unmark completed |
 | `delete_reminder` | destructive, idempotent | Permanently delete |
 

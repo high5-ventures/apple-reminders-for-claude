@@ -155,6 +155,13 @@ const ADDITIVE = {
   idempotentHint: false,
   openWorldHint: false,
 };
+// Completing a repeating reminder completes one occurrence per call.
+const DESTRUCTIVE = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: false,
+};
 const DESTRUCTIVE_IDEMPOTENT = {
   readOnlyHint: false,
   destructiveHint: true,
@@ -450,7 +457,11 @@ const TOOLS = [
   },
   {
     name: "complete_reminder",
-    description: "Mark a reminder as completed by ID.",
+    description:
+      "Mark a reminder as completed by ID. A repeating reminder is not closed: it moves on to its next occurrence and " +
+      "stays open under the same ID with the next due date, and the Reminders store keeps the finished occurrence as a " +
+      "separate completed reminder without the rule. Each call therefore completes one more occurrence. To stop a " +
+      "reminder from repeating, update it with clearRecurrence first.",
     inputSchema: {
       type: "object",
       properties: {
@@ -458,7 +469,7 @@ const TOOLS = [
       },
       required: ["id"],
     },
-    annotations: { title: "Complete reminder", ...DESTRUCTIVE_IDEMPOTENT },
+    annotations: { title: "Complete reminder", ...DESTRUCTIVE },
   },
   {
     name: "uncomplete_reminder",
