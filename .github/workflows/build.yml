@@ -128,11 +128,16 @@ jobs:
       - name: Grant the binary Reminders access
         run: |
           csrutil status
-          DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
-          sqlite3 "$DB" ".schema access"
-          sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
-            VALUES ('kTCCServiceReminders', '$GITHUB_WORKSPACE/dist/reminders-eventkit', 1, 2, 4, 1),
-                   ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);"
+          for DB in "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
+                    "/Library/Application Support/com.apple.TCC/TCC.db"; do
+            echo "== $DB"
+            sudo ls -la "$(dirname "$DB")" || continue
+            sudo sqlite3 "$DB" ".schema access" || continue
+            sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
+              VALUES ('kTCCServiceReminders', '$GITHUB_WORKSPACE/dist/reminders-eventkit', 1, 2, 4, 1),
+                     ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);" || true
+            sudo sqlite3 "$DB" "SELECT service, client, auth_value FROM access WHERE service = 'kTCCServiceReminders';" || true
+          done
           REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
             | tee "$RUNNER_TEMP/lists.json"
           grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"

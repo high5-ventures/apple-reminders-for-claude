@@ -100,7 +100,11 @@ ${CLAUDE_SKILL_DIR}/bin/reminders-eventkit list-reminders "Reise und Freizeit" "
   "title": "Buy milk",                   // required
   "body": "organic, 1.5l",               // optional
   "dueDate": "2026-04-11T18:00:00",      // optional, ISO-8601, or "2026-04-11" without a time
-  "priority": 5                          // optional, one of 0|1|5|9, default 0
+  "priority": 5,                         // optional, one of 0|1|5|9, default 0
+  "recurrence": {                        // optional, needs dueDate; see "Repeating reminders"
+    "frequency": "weekly",
+    "daysOfWeek": ["monday", "thursday"]
+  }
 }
 ```
 
@@ -113,11 +117,47 @@ ${CLAUDE_SKILL_DIR}/bin/reminders-eventkit list-reminders "Reise und Freizeit" "
   "body": "...",                         // optional, replaces
   "dueDate": "2026-04-11T18:00:00",      // optional, replaces the due date and its alerts
   "clearDueDate": true,                  // optional, wipes due date explicitly
-  "priority": 5                          // optional
+  "priority": 5,                         // optional
+  "recurrence": { "frequency": "daily" },// optional, replaces the repeat rule
+  "clearRecurrence": true                // optional, stops the reminder repeating
 }
 ```
 
-Use `clearDueDate: true` to distinguish "remove the due date" from "leave unchanged" (which is what happens when you omit `dueDate`).
+Use `clearDueDate: true` to distinguish "remove the due date" from "leave unchanged" (which is what happens when you omit `dueDate`). A repeating reminder needs a due date, so removing the due date of one takes `clearRecurrence: true` in the same payload; `clearDueDate` alone returns `INVALID_PAYLOAD` and changes nothing.
+
+### Repeating reminders
+
+`recurrence` is the Repeat setting of the Reminders app. It needs a due date, which is the first occurrence. Every field except `frequency` is optional:
+
+```json
+{
+  "frequency": "monthly",                // daily | weekly | monthly | yearly
+  "interval": 1,                         // every N units, default 1
+  "daysOfWeek": ["monday", {"day": "friday", "week": -1}],
+                                         // weekly/monthly/yearly; the object form is the nth
+                                         // weekday of the month or year, -1 = the last
+  "daysOfMonth": [1, -1],                // monthly: 1..31, -1 = the last day
+  "monthsOfYear": [3, 9],                // yearly: 1..12
+  "weeksOfYear": [1],                    // yearly: 1..53, negative from the end
+  "daysOfYear": [100],                   // yearly: 1..366, negative from the end
+  "setPositions": [-1],                  // keeps the nth of the days the lists above give
+  "end": {"date": "2026-12-31"}          // or {"count": 10}; omit to repeat forever
+}
+```
+
+Common rules:
+
+| Intent | `recurrence` |
+|---|---|
+| Every day | `{"frequency":"daily"}` |
+| Every weekday | `{"frequency":"weekly","daysOfWeek":["monday","tuesday","wednesday","thursday","friday"]}` |
+| Every other week | `{"frequency":"weekly","interval":2}` |
+| Last day of each month | `{"frequency":"monthly","daysOfMonth":[-1]}` |
+| First Monday of each month | `{"frequency":"monthly","daysOfWeek":[{"day":"monday","week":1}]}` |
+| Last weekday of each month | `{"frequency":"monthly","daysOfWeek":["monday","tuesday","wednesday","thursday","friday"],"setPositions":[-1]}` |
+| Every year, 10 times | `{"frequency":"yearly","end":{"count":10}}` |
+
+An `end.date` without a time includes that whole day. Unknown fields, values out of range and lists that do not fit the frequency return `INVALID_PAYLOAD` with the reason; nothing is saved.
 
 ### Reminder schema (returned by every read function)
 
@@ -132,11 +172,12 @@ Use `clearDueDate: true` to distinguish "remove the due date" from "leave unchan
   "completion_date": null,
   "priority": 5,
   "flagged": false,
-  "list": "Groceries"
+  "list": "Groceries",
+  "recurrence": null
 }
 ```
 
-Optional fields are `null` when not set. A `due_date` without a time is a date only, such as `"2026-04-11"`. Field names are stable — the skill and any downstream consumers can depend on them.
+Optional fields are `null` when not set. A `due_date` without a time is a date only, such as `"2026-04-11"`. `recurrence` is the repeat rule in the form `create-reminder` takes, so it can be passed back unchanged; it lists only the fields that are set, always with `interval`, and an `end.date` as a local time such as `"2026-12-31T23:59:59"`. Field names are stable — the skill and any downstream consumers can depend on them.
 
 ## Known limitations
 
@@ -152,7 +193,7 @@ EventKit returns the true completed count from the database. The Reminders app U
 
 v1 is read/write on reminders within existing lists only. List management (create/rename/delete) would require additional EventKit calls and is deliberately deferred to keep the binary small. If the user asks to create a list, tell them to create it manually in the Reminders app once, then the skill can write into it freely.
 
-### Sub-tasks, tags, attachments, and recurrence are not supported
+### Sub-tasks, tags, and attachments are not supported
 
 Same reasoning — deferred to keep the surface area small. Sub-tasks in particular require the macOS 13+ subreminder API and careful parent-child handling.
 
@@ -181,7 +222,7 @@ Do not compile anything on the user's machine. The binary is a signed, notarized
 - `REMINDER_NOT_FOUND` — the ID is unknown. Usually means a stale ID from a previous session; re-query.
 - `INVALID_PRIORITY` — priority was not one of `0|1|5|9`.
 - `INVALID_FILTER` — filter was not one of `open|completed|all`.
-- `INVALID_PAYLOAD` — the JSON payload couldn't be parsed, was missing a required field, or contained an unparseable `dueDate`. The message says which.
+- `INVALID_PAYLOAD` — the JSON payload couldn't be parsed, was missing a required field, contained an unparseable `dueDate` or an invalid `recurrence`, or would leave a repeating reminder without a due date. The message says which.
 - `UNKNOWN_COMMAND` — the first positional argument wasn't one of the commands listed in the catalog above. Usually a typo.
 - `PERMISSION_DENIED` — macOS refused Reminders access. Tell the user to approve it in *System Settings → Privacy & Security → Reminders*.
 - `PERMISSION_UNAVAILABLE` — macOS refused the request without showing a dialog, so there is no entry in System Settings to switch on. Granting or resetting permissions cannot fix it; show the user the message and point them at the project's issue tracker.
