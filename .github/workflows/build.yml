@@ -122,25 +122,34 @@ jobs:
             || { echo "x86_64 slice did not run" >&2; exit 1; }
 
       # Everything above stops at the permission request. The job VMs run with
-      # SIP disabled, so the user's TCC database is writable: grant the binary
+      # SIP disabled, so TCC's databases are writable: grant the binary
       # Reminders access as clicking "Allow" would, by path and by the bundle
-      # identifier in its embedded Info.plist.
+      # identifier in its embedded Info.plist. Reminders is a per-user service,
+      # read from the user's database, which a fresh VM does not have yet; it
+      # gets the schema of the system database, and the user's tccd restarts
+      # to open it.
       - name: Grant the binary Reminders access
         run: |
           csrutil status
-          for DB in "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
-                    "/Library/Application Support/com.apple.TCC/TCC.db"; do
-            echo "== $DB"
-            sudo ls -la "$(dirname "$DB")" || continue
-            sudo sqlite3 "$DB" ".schema access" || continue
-            sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
-              VALUES ('kTCCServiceReminders', '$GITHUB_WORKSPACE/dist/reminders-eventkit', 1, 2, 4, 1),
-                     ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);" || true
-            sudo sqlite3 "$DB" "SELECT service, client, auth_value FROM access WHERE service = 'kTCCServiceReminders';" || true
-          done
+          SYSTEM_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          USER_DIR="$HOME/Library/Application Support/com.apple.TCC"
+          USER_DB="$USER_DIR/TCC.db"
+          mkdir -p "$USER_DIR"
+          if [[ ! -s "$USER_DB" ]]; then
+            sudo sqlite3 "$SYSTEM_DB" .schema | sqlite3 "$USER_DB"
+          fi
+          sqlite3 "$USER_DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version)
+            VALUES ('kTCCServiceReminders', '$GITHUB_WORKSPACE/dist/reminders-eventkit', 1, 2, 4, 1),
+                   ('kTCCServiceReminders', 'de.h5ventures.reminders-eventkit', 0, 2, 4, 1);"
+          sqlite3 "$USER_DB" "SELECT service, client, auth_value FROM access;"
+          launchctl kickstart -k "gui/$(id -u)/com.apple.tccd" || pkill -u "$(id -u)" -x tccd || true
+          sleep 2
           REMINDERS_TCC_TIMEOUT_SECONDS=10 ./dist/reminders-eventkit list-lists \
             | tee "$RUNNER_TEMP/lists.json"
-          grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
+          grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json" || {
+            log show --last 2m --info --predicate 'process == "tccd"' | grep -i -B2 -A8 reminder | tail -80
+            exit 1
+          }
 
       # A fresh store may have no list yet; the Reminders app creates its
       # default one on first launch.
