@@ -121,6 +121,71 @@ jobs:
           echo "$OUTPUT" | grep -q '"code":"UNKNOWN_COMMAND"' \
             || { echo "x86_64 slice did not run" >&2; exit 1; }
 
+      # tccd checks a grant's code requirement against the whole executable.
+      # The linker ad-hoc signs only the arm64 slice, so against
+      # dist/reminders-eventkit every requirement fails ("Failed to match
+      # existing code requirement") and only the first call, before tccd has
+      # stored one, gets access. The test runs a copy signed in all slices.
+      - name: Sign a test copy of the binary
+        run: |
+          cp dist/reminders-eventkit "$RUNNER_TEMP/reminders-eventkit"
+          codesign --force --sign - "$RUNNER_TEMP/reminders-eventkit"
+          codesign --verify --all-architectures "$RUNNER_TEMP/reminders-eventkit"
+
+      # Everything above stops at the permission request. The job VMs run with
+      # SIP disabled, so TCC's databases are writable: grant Reminders access
+      # by path with a code requirement, as clicking "Allow" would. On macOS
+      # 27 the user's tccd reads these grants from a database in a
+      # ProtectedSystem container; a row in
+      # ~/Library/Application Support/com.apple.TCC/TCC.db has no effect.
+      - name: Grant Reminders access
+        run: |
+          csrutil status | grep -q disabled
+          DBS=$(sudo find /private/var/containers/Data/ProtectedSystem \
+            -path '*/Library/Application Support/com.apple.TCC/TCC.db' 2>/dev/null)
+          [[ -n "$DBS" ]] || { echo "no TCC database in a ProtectedSystem container" >&2; exit 1; }
+          echo "$DBS" > "$RUNNER_TEMP/tcc-dbs"
+          identifier() { codesign -dv "$@" 2>&1 | sed -n 's/^Identifier=//p'; }
+          requirement() {
+            echo "requirement: $1" >&2
+            csreq -r "=$1" -b "$RUNNER_TEMP/req.bin"
+            xxd -p "$RUNNER_TEMP/req.bin" | tr -d '\n'
+          }
+          BIN="$RUNNER_TEMP/reminders-eventkit"
+          ID=$(identifier -a "$(uname -m)" "$BIN")
+          [[ -n "$ID" ]] || { echo "no code signing identifier in the $(uname -m) slice" >&2; exit 1; }
+          BIN_REQ=$(requirement "identifier \"$ID\"")
+          while IFS= read -r DB; do
+            sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq)
+              VALUES ('kTCCServiceReminders', '$BIN', 1, 2, 4, 1, X'$BIN_REQ');"
+          done <<< "$DBS"
+          REMINDERS_TCC_TIMEOUT_SECONDS=10 "$BIN" list-lists | tee "$RUNNER_TEMP/lists.json"
+          grep -q '"status":"ok"' "$RUNNER_TEMP/lists.json"
+
+      - name: Reminders round trip through EventKit (#31)
+        working-directory: npm-package
+        env:
+          REMINDERS_BINARY: ${{ runner.temp }}/reminders-eventkit
+          REMINDERS_TCC_TIMEOUT_SECONDS: 10
+        run: |
+          npm ci --no-audit --no-fund --ignore-scripts
+          node test/eventkit-integration.mjs
+
+      - name: TCC diagnostics
+        if: failure()
+        run: |
+          [[ -f "$RUNNER_TEMP/tcc-dbs" ]] || exit 0
+          while IFS= read -r DB; do
+            sudo sqlite3 "$DB" "SELECT client, auth_value, hex(csreq) FROM access WHERE service = 'kTCCServiceReminders';" \
+              | while IFS='|' read -r CLIENT AUTH REQ; do
+                  echo "$REQ" | xxd -r -p > "$RUNNER_TEMP/stored-req.bin"
+                  echo "$CLIENT auth_value=$AUTH requirement: $(csreq -r "$RUNNER_TEMP/stored-req.bin" -t 2>&1)"
+                done
+          done < "$RUNNER_TEMP/tcc-dbs"
+          /usr/bin/log show --last 6m --style compact \
+            --predicate 'subsystem == "com.apple.TCC" AND (eventMessage CONTAINS[c] "Reminders" OR eventMessage CONTAINS[c] "reminders-eventkit")' \
+            | tail -150
+
   # Rosetta above only shows that the Intel slice launches. This job runs it on
   # Intel hardware, through EventKit up to the permission request, and through
   # the path that failed in #21: the Node server spawning the binary.

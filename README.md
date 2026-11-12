@@ -61,7 +61,7 @@ All three ship the same binary and the same 13 tools, so behaviour does not diff
 
 ## Features
 
-- **13 MCP tools** covering the full reminder lifecycle: list lists, list reminders (open/completed/all), full-text search, today/overdue/scheduled smart queries, CRUD on individual reminders.
+- **13 MCP tools** covering the full reminder lifecycle: list lists, list reminders (open/completed/all), full-text search, today/overdue/scheduled smart queries, CRUD on individual reminders, including repeating ones.
 - **Native EventKit** — not AppleScript, not reverse-engineered SQLite scraping.
 - **Stable UUIDs** — reminder IDs survive across sessions, unlike AppleScript URIs or CLI positional indexes.
 - **Tool safety annotations** — every tool declares `readOnlyHint` / `destructiveHint` so Claude clients can auto-run queries but prompt for mutations.
@@ -117,6 +117,19 @@ In Claude Desktop and Cowork the tools appear under **Apple Reminders**; in Clau
 > { "status": "ok", "data": { "reminder": { "id": "G7H8…", "completed": true, "completion_date": "2026-04-14T18:22:01" } } }
 > ```
 > **Claude:** Two overdue items: Slack reply (now marked done) and PR #482 review (still open).
+
+### Example 4 — "Make it repeat"
+
+> **You:** Remind me to water the plants every Monday and Thursday at 8am, starting next Monday.
+>
+> **Claude** (invokes `create_reminder`):
+> ```json
+> { "list": "Home", "title": "Water the plants", "dueDate": "2026-04-20T08:00:00",
+>   "recurrence": { "frequency": "weekly", "daysOfWeek": ["monday", "thursday"] } }
+> ```
+> **Claude:** Done — "Water the plants" repeats every Monday and Thursday at 08:00, starting April 20.
+
+A repeating reminder needs a due date, its first occurrence. `recurrence` covers what the Repeat setting of the Reminders app offers: every N days, weeks, months or years, on chosen weekdays, on days of the month such as the last one (`daysOfMonth: [-1]`), on the nth weekday such as the last Friday (`{"day": "friday", "week": -1}`), and until a date or for a number of times (`end`). Read results report the rule in the same form; `update_reminder` replaces it with `recurrence` or removes it with `clearRecurrence: true`.
 
 ## Installation
 
@@ -219,9 +232,9 @@ All 13 tools return a stable JSON envelope — `{ "status": "ok", "data": ... }`
 | `get_overdue` | read-only | Overdue open reminders |
 | `get_scheduled` | read-only | All open reminders with a due date |
 | `get_reminder` | read-only | Fetch one reminder by ID |
-| `create_reminder` | additive | Create a new reminder |
-| `update_reminder` | destructive, idempotent | Update an existing reminder |
-| `complete_reminder` | destructive, idempotent | Mark as completed |
+| `create_reminder` | additive | Create a new reminder, optionally repeating |
+| `update_reminder` | destructive, idempotent | Update an existing reminder, including its repeat rule |
+| `complete_reminder` | destructive | Mark as completed; a repeating reminder moves on to its next occurrence |
 | `uncomplete_reminder` | destructive, idempotent | Unmark completed |
 | `delete_reminder` | destructive, idempotent | Permanently delete |
 

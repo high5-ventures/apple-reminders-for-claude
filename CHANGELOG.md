@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-12
+
+### Added
+- **Repeating reminders** ([#31](https://github.com/high5-ventures/apple-reminders-for-claude/issues/31)) — `create_reminder` and `update_reminder` accept a `recurrence` rule: `daily`, `weekly`, `monthly` or `yearly`, every n intervals, optionally on given weekdays (also "the last Friday of the month"), days of the month, months, weeks or days of the year, and set positions ("the last weekday of the month"), ending after a number of times or on a date. `update_reminder` replaces the rule with a new one, and `clearRecurrence: true` stops the reminder from repeating. Every reminder in a read result carries its rule in a new `recurrence` field, `null` when it does not repeat. A repeating reminder needs a due date, as in the Reminders app: a rule without one, or removing the due date of a repeating reminder without `clearRecurrence`, is refused with `INVALID_PAYLOAD`, and so is a rule with fields that do not fit its frequency. `complete_reminder` on a repeating reminder behaves like the Reminders app: the reminder stays open under the same ID with the due date of its next occurrence, and the finished occurrence is kept as a separate completed reminder. Because each call completes one more occurrence, `complete_reminder` no longer declares itself idempotent.
+- **CI round trip through a real Reminders store** ([#31](https://github.com/high5-ventures/apple-reminders-for-claude/issues/31)) — `build.yml` grants the binary Reminders access on its macOS VM and runs `npm-package/test/eventkit-integration.mjs`, which creates, reads back, updates, completes and deletes reminders through the MCP server and EventKit. Until now CI stopped at the permission request.
+
 ## [1.1.0] — 2026-10-19
 
 ### Fixed

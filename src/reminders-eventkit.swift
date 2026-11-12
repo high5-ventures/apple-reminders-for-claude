@@ -44,7 +44,9 @@
 //       "body": "organic, 1.5l",
 //       "dueDate": "2026-04-11T18:00:00",  // ISO-8601 local or with offset,
 //                                          // or "2026-04-11" for a date without a time
-//       "priority": 5 }           // 0|1|5|9
+//       "priority": 5,            // 0|1|5|9
+//       "recurrence": { "frequency": "weekly", "daysOfWeek": ["monday"] } }
+//                                 // needs a dueDate; see parseRecurrence
 //
 //   update:
 //     { "id": "UUID",             // required
@@ -52,7 +54,9 @@
 //       "body": "...",
 //       "dueDate": "...",
 //       "clearDueDate": true,     // explicit wipe
-//       "priority": 5 }
+//       "priority": 5,
+//       "recurrence": { ... },    // replaces the repeat rule
+//       "clearRecurrence": true } // stops the reminder repeating
 //
 // There is no `flagged` field: EventKit does not expose the flag (see the note
 // below reminderDict).
@@ -240,6 +244,248 @@ func invalidDueDateMessage(_ s: String) -> String {
     return "Could not parse dueDate '\(s)'. Use ISO-8601 local time like 2026-04-11T18:00:00, with offset like 2026-04-11T18:00:00+02:00, or a date without a time like 2026-04-11."
 }
 
+// MARK: - Recurrence --------------------------------------------------------
+
+/// An integer from a JSON payload. JSONSerialization hands numbers and
+/// booleans over as NSNumber, and `as? Int` would read `true` as 1.
+func jsonInt(_ value: Any?) -> Int? {
+    guard let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID()
+    else { return nil }
+    let i = n.intValue
+    return Double(i) == n.doubleValue ? i : nil
+}
+
+/// Index + 1 is the EKWeekday raw value (Sunday = 1).
+let weekdayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+
+let frequencyNames: [(String, EKRecurrenceFrequency)] = [
+    ("daily", .daily), ("weekly", .weekly), ("monthly", .monthly), ("yearly", .yearly),
+]
+
+func frequencyName(_ f: EKRecurrenceFrequency) -> String {
+    return frequencyNames.first(where: { $0.1 == f })?.0 ?? "unknown"
+}
+
+/// The integer lists of a repeat rule: payload key, the largest value, whether
+/// values may count back from the end (-1 = last), and the frequencies the
+/// list is valid for. Ranges and frequencies are those Apple documents for
+/// EKRecurrenceRule's initializer, which does not check them itself.
+let recurrenceIntLists: [(key: String, limit: Int, signed: Bool, frequencies: [EKRecurrenceFrequency])] = [
+    ("daysOfMonth", 31, true, [.monthly]),
+    ("monthsOfYear", 12, false, [.yearly]),
+    ("weeksOfYear", 53, true, [.yearly]),
+    ("daysOfYear", 366, true, [.yearly]),
+    ("setPositions", 366, true, [.daily, .weekly, .monthly, .yearly]),
+]
+
+let recurrenceKeys: Set<String> = Set(
+    ["frequency", "interval", "daysOfWeek", "end"] + recurrenceIntLists.map { $0.key }
+)
+
+enum RecurrenceParse {
+    case rule(EKRecurrenceRule)
+    case invalid(String)
+}
+
+/// Parse a payload `recurrence` into a repeat rule. The object mirrors
+/// EKRecurrenceRule, and `recurrenceDict` reports a rule in the same shape,
+/// so a rule read from one reminder can be passed back unchanged:
+///
+///   { "frequency": "daily" | "weekly" | "monthly" | "yearly",  // required
+///     "interval": 2,                    // every 2 units, default 1
+///     "daysOfWeek": ["monday", {"day": "friday", "week": -1}],
+///                                       // week: nth weekday of the month or
+///                                       // year, -1 = last; monthly/yearly only
+///     "daysOfMonth": [1, -1],           // monthly
+///     "monthsOfYear": [3, 9],           // yearly
+///     "weeksOfYear": [1], "daysOfYear": [100],  // yearly
+///     "setPositions": [-1],             // keeps the nth of the days the other
+///                                       // lists produce, -1 = the last one
+///     "end": { "date": "2026-12-31" } | { "count": 10 } }
+///
+/// An end date without a time includes that whole day. Unknown keys are
+/// refused: a misspelled one would otherwise save a different rule than the
+/// caller asked for.
+func parseRecurrence(_ raw: Any) -> RecurrenceParse {
+    guard let obj = raw as? [String: Any] else {
+        return .invalid("recurrence must be an object.")
+    }
+    if let unknown = obj.keys.filter({ !recurrenceKeys.contains($0) }).sorted().first {
+        return .invalid("Unknown recurrence field '\(unknown)'. Allowed: \(recurrenceKeys.sorted().joined(separator: ", ")).")
+    }
+
+    guard let freqName = obj["frequency"] as? String,
+          let frequency = frequencyNames.first(where: { $0.0 == freqName })?.1
+    else {
+        return .invalid("recurrence.frequency must be one of daily, weekly, monthly, yearly.")
+    }
+
+    var interval = 1
+    if let rawInterval = obj["interval"] {
+        guard let i = jsonInt(rawInterval), i >= 1 else {
+            return .invalid("recurrence.interval must be an integer of at least 1.")
+        }
+        interval = i
+    }
+
+    var days: [EKRecurrenceDayOfWeek]? = nil
+    if let rawDays = obj["daysOfWeek"] {
+        guard let items = rawDays as? [Any] else {
+            return .invalid("recurrence.daysOfWeek must be an array.")
+        }
+        if !items.isEmpty && frequency == .daily {
+            return .invalid("recurrence.daysOfWeek needs frequency weekly, monthly or yearly.")
+        }
+        // The nth weekday counts within the month or the year.
+        let weekLimit = frequency == .monthly ? 5 : frequency == .yearly ? 53 : 0
+        var parsed: [EKRecurrenceDayOfWeek] = []
+        for item in items {
+            var name: String?
+            var week = 0
+            if let s = item as? String {
+                name = s
+            } else if let o = item as? [String: Any] {
+                if let unknown = o.keys.filter({ $0 != "day" && $0 != "week" }).sorted().first {
+                    return .invalid("Unknown recurrence.daysOfWeek field '\(unknown)'. Allowed: day, week.")
+                }
+                name = o["day"] as? String
+                if let rawWeek = o["week"] {
+                    guard let w = jsonInt(rawWeek) else {
+                        return .invalid("recurrence.daysOfWeek week must be an integer.")
+                    }
+                    week = w
+                }
+            }
+            guard let n = name?.lowercased(), let index = weekdayNames.firstIndex(of: n),
+                  let weekday = EKWeekday(rawValue: index + 1)
+            else {
+                return .invalid("recurrence.daysOfWeek takes weekday names (\(weekdayNames.joined(separator: ", "))) or objects like {\"day\": \"friday\", \"week\": -1}.")
+            }
+            if week != 0 && (weekLimit == 0 || abs(week) > weekLimit) {
+                return .invalid(weekLimit == 0
+                    ? "recurrence.daysOfWeek week needs frequency monthly or yearly."
+                    : "recurrence.daysOfWeek week must be 1 to \(weekLimit) or -1 to -\(weekLimit) for frequency \(freqName).")
+            }
+            parsed.append(week == 0
+                ? EKRecurrenceDayOfWeek(weekday)
+                : EKRecurrenceDayOfWeek(weekday, weekNumber: week))
+        }
+        if !parsed.isEmpty { days = parsed }
+    }
+
+    var lists: [String: [NSNumber]] = [:]
+    for spec in recurrenceIntLists {
+        guard let rawList = obj[spec.key] else { continue }
+        guard let items = rawList as? [Any] else {
+            return .invalid("recurrence.\(spec.key) must be an array of integers.")
+        }
+        if items.isEmpty { continue }
+        if !spec.frequencies.contains(frequency) {
+            let allowed = spec.frequencies.map(frequencyName).joined(separator: " or ")
+            return .invalid("recurrence.\(spec.key) needs frequency \(allowed).")
+        }
+        var values: [NSNumber] = []
+        for item in items {
+            guard let v = jsonInt(item), v != 0, abs(v) <= spec.limit, spec.signed || v > 0 else {
+                let range = spec.signed ? "1 to \(spec.limit) or -1 to -\(spec.limit)" : "1 to \(spec.limit)"
+                return .invalid("recurrence.\(spec.key) values must be integers from \(range).")
+            }
+            values.append(NSNumber(value: v))
+        }
+        lists[spec.key] = values
+    }
+    // A set position picks from the days the other lists produce; alone it
+    // selects nothing (RFC 5545, BYSETPOS).
+    if lists["setPositions"] != nil && days == nil && lists.count == 1 {
+        return .invalid("recurrence.setPositions needs daysOfWeek, daysOfMonth, monthsOfYear, weeksOfYear or daysOfYear.")
+    }
+
+    var end: EKRecurrenceEnd? = nil
+    if let rawEnd = obj["end"] {
+        guard let e = rawEnd as? [String: Any], e.count == 1 else {
+            return .invalid("recurrence.end must be {\"date\": \"2026-12-31\"} or {\"count\": 10}.")
+        }
+        if let rawCount = e["count"] {
+            guard let count = jsonInt(rawCount), count >= 1 else {
+                return .invalid("recurrence.end.count must be an integer of at least 1.")
+            }
+            end = EKRecurrenceEnd(occurrenceCount: count)
+        } else if let dateString = e["date"] as? String {
+            switch parseDueDate(dateString) {
+            case .time(let d)?:
+                end = EKRecurrenceEnd(end: d)
+            case .day(let comps)?:
+                // The last second of that day, so a reminder due on it at any
+                // time still repeats one last time.
+                let start = gregorian.date(
+                    from: DateComponents(year: comps.year, month: comps.month, day: comps.day)
+                )!
+                let next = gregorian.date(byAdding: .day, value: 1, to: start)!
+                end = EKRecurrenceEnd(end: next.addingTimeInterval(-1))
+            case nil:
+                return .invalid("Could not parse recurrence.end.date '\(dateString)'. Use a date like 2026-12-31 or a local time like 2026-12-31T18:00:00.")
+            }
+        } else {
+            return .invalid("recurrence.end must be {\"date\": \"2026-12-31\"} or {\"count\": 10}.")
+        }
+    }
+
+    return .rule(EKRecurrenceRule(
+        recurrenceWith: frequency,
+        interval: interval,
+        daysOfTheWeek: days,
+        daysOfTheMonth: lists["daysOfMonth"],
+        monthsOfTheYear: lists["monthsOfYear"],
+        weeksOfTheYear: lists["weeksOfYear"],
+        daysOfTheYear: lists["daysOfYear"],
+        setPositions: lists["setPositions"],
+        end: end
+    ))
+}
+
+/// A repeat rule in the shape `parseRecurrence` accepts. Lists that are not
+/// set are left out; a day of the week without a week number is a plain name.
+func recurrenceDict(_ rule: EKRecurrenceRule) -> [String: Any] {
+    var dict: [String: Any] = [
+        "frequency": frequencyName(rule.frequency),
+        "interval": rule.interval,
+    ]
+    if let days = rule.daysOfTheWeek, !days.isEmpty {
+        dict["daysOfWeek"] = days.map { day -> Any in
+            let raw = day.dayOfTheWeek.rawValue
+            let name = (1...7).contains(raw) ? weekdayNames[raw - 1] : String(raw)
+            if day.weekNumber == 0 { return name }
+            let item: [String: Any] = ["day": name, "week": day.weekNumber]
+            return item
+        }
+    }
+    let lists: [(String, [NSNumber]?)] = [
+        ("daysOfMonth", rule.daysOfTheMonth),
+        ("monthsOfYear", rule.monthsOfTheYear),
+        ("weeksOfYear", rule.weeksOfTheYear),
+        ("daysOfYear", rule.daysOfTheYear),
+        ("setPositions", rule.setPositions),
+    ]
+    for (key, values) in lists {
+        if let values = values, !values.isEmpty { dict[key] = values.map { $0.intValue } }
+    }
+    if let end = rule.recurrenceEnd {
+        if let date = end.endDate {
+            dict["end"] = ["date": isoFormatter.string(from: date)]
+        } else {
+            dict["end"] = ["count": end.occurrenceCount]
+        }
+    }
+    return dict
+}
+
+func hasRecurrence(_ r: EKReminder) -> Bool {
+    return !(r.recurrenceRules ?? []).isEmpty
+}
+
+let recurrenceNeedsDueDateMessage =
+    "A repeating reminder needs a due date: pass dueDate together with recurrence."
+
 // MARK: - Reminder serialisation -------------------------------------------
 
 /// Convert an EKReminder to a dictionary matching the skill's JSON schema.
@@ -282,6 +528,13 @@ func reminderDict(_ r: EKReminder) -> [String: Any] {
         dict["completion_date"] = isoFormatter.string(from: cd)
     } else {
         dict["completion_date"] = NSNull()
+    }
+
+    // The Reminders app gives a reminder at most one repeat rule.
+    if let rule = r.recurrenceRules?.first {
+        dict["recurrence"] = recurrenceDict(rule)
+    } else {
+        dict["recurrence"] = NSNull()
     }
 
     return dict
@@ -700,6 +953,15 @@ enum Command {
             )
         }
 
+        var rule: EKRecurrenceRule? = nil
+        if let rawRecurrence = obj["recurrence"], !(rawRecurrence is NSNull) {
+            switch parseRecurrence(rawRecurrence) {
+            case .rule(let parsed): rule = parsed
+            case .invalid(let message):
+                return Json.err(code: "INVALID_PAYLOAD", message: message)
+            }
+        }
+
         let r = EKReminder(eventStore: Store.shared.store)
         r.calendar = cal
         r.title = title
@@ -714,6 +976,15 @@ enum Command {
                 )
             }
             setDueDate(r, due)
+        }
+
+        if let rule = rule {
+            // EventKit refuses to save a repeating reminder without one
+            // (EKError.recurringReminderRequiresDueDate).
+            guard r.dueDateComponents != nil else {
+                return Json.err(code: "INVALID_PAYLOAD", message: recurrenceNeedsDueDateMessage)
+            }
+            r.recurrenceRules = [rule]
         }
 
         do {
@@ -763,6 +1034,22 @@ enum Command {
             r.priority = priority
         }
 
+        let clearRecurrence = (obj["clearRecurrence"] as? Bool) ?? false
+        var rule: EKRecurrenceRule? = nil
+        if let rawRecurrence = obj["recurrence"], !(rawRecurrence is NSNull) {
+            if clearRecurrence {
+                return Json.err(
+                    code: "INVALID_PAYLOAD",
+                    message: "Pass either recurrence or clearRecurrence, not both."
+                )
+            }
+            switch parseRecurrence(rawRecurrence) {
+            case .rule(let parsed): rule = parsed
+            case .invalid(let message):
+                return Json.err(code: "INVALID_PAYLOAD", message: message)
+            }
+        }
+
         let clearDue = (obj["clearDueDate"] as? Bool) ?? false
         if clearDue {
             r.dueDateComponents = nil
@@ -781,6 +1068,24 @@ enum Command {
                 for a in alarms { r.removeAlarm(a) }
             }
             setDueDate(r, due)
+        }
+
+        if clearRecurrence {
+            r.recurrenceRules = nil
+        } else if let rule = rule {
+            r.recurrenceRules = [rule]
+        }
+
+        // EventKit refuses to save a repeating reminder without a due date
+        // (EKError.recurringReminderRequiresDueDate). Say which field to add
+        // instead of passing its error through.
+        if hasRecurrence(r) && r.dueDateComponents == nil {
+            return Json.err(
+                code: "INVALID_PAYLOAD",
+                message: rule != nil
+                    ? recurrenceNeedsDueDateMessage
+                    : "This reminder repeats, and a repeating reminder needs a due date. To remove the due date, pass clearRecurrence: true as well."
+            )
         }
 
         do {
