@@ -128,7 +128,7 @@ jobs:
         run: |
           /usr/bin/swiftc npm-package/test/make-reminder-list.swift \
             -o "$RUNNER_TEMP/make-reminder-list" \
-            -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker src/Info.plist
+            -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker npm-package/test/make-reminder-list.Info.plist
 
       # Everything above stops at the permission request. The job VMs run with
       # SIP disabled, so TCC's databases are writable: grant Reminders access

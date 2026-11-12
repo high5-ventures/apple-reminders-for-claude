@@ -7,7 +7,7 @@
 // Reminders access like the binary itself; build.yml grants it by path.
 //
 //   swiftc make-reminder-list.swift -o make-reminder-list \
-//     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker ../src/Info.plist
+//     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker make-reminder-list.Info.plist
 //   ./make-reminder-list CI
 
 import EventKit

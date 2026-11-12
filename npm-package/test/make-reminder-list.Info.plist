@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Embedded into make-reminder-list by build.yml. Its own bundle identifier:
+  sharing the binary's makes tccd bind that identifier's grant to this
+  helper's signature, and the binary loses Reminders access.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>de.h5ventures.reminders-eventkit.ci-make-list</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>Creates a reminder list for the CI test.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Creates a reminder list for the CI test.</string>
+</dict>
+</plist>
