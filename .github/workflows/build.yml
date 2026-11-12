@@ -136,8 +136,8 @@ jobs:
       # these grants from a database in a ProtectedSystem container; a row in
       # ~/Library/Application Support/com.apple.TCC/TCC.db has no effect.
       # Each row carries a code requirement. Without one, tccd stores its own
-      # on first use, and for the universal binary, ad-hoc signed only in its
-      # arm64 slice, that one never matches again ("Failed to match existing code requirement"), so
+      # on first use, and for this ad-hoc signed universal binary that one
+      # never matches again ("Failed to match existing code requirement"), so
       # only the first call would get access.
       - name: Grant Reminders access
         run: |
@@ -146,7 +146,7 @@ jobs:
             -path '*/Library/Application Support/com.apple.TCC/TCC.db' 2>/dev/null)
           [[ -n "$DBS" ]] || { echo "no TCC database in a ProtectedSystem container" >&2; exit 1; }
           echo "$DBS" > "$RUNNER_TEMP/tcc-dbs"
-          identifier() { codesign -d "$@" 2>&1 | sed -n 's/^Identifier=//p'; }
+          identifier() { codesign -dv "$@" 2>&1 | sed -n 's/^Identifier=//p'; }
           requirement() {
             echo "requirement: $1" >&2
             csreq -r "=$1" -b "$RUNNER_TEMP/req.bin"
@@ -154,8 +154,7 @@ jobs:
           }
           BIN="$GITHUB_WORKSPACE/dist/reminders-eventkit"
           HELPER="$RUNNER_TEMP/make-reminder-list"
-          # Only the slice that runs here: the linker ad-hoc signs arm64
-          # slices only, so the x86_64 slice has no identifier.
+          # The slice that runs here; each slice has its own identifier.
           ID=$(identifier -a "$(uname -m)" "$BIN")
           [[ -n "$ID" ]] || { echo "no code signing identifier in the $(uname -m) slice" >&2; exit 1; }
           BIN_REQ=$(requirement "identifier \"$ID\"")
