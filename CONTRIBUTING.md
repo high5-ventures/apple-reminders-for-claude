@@ -138,7 +138,7 @@ git push origin v1.1.0
 
 The `.github/workflows/release.yml` workflow then:
 
-1. Builds the universal Swift binary (arm64 + x86_64) with Xcode 27 on `macrunner` and refuses to publish one that lacks either slice
+1. Builds the universal Swift binary (arm64 + x86_64) with Xcode 27 on GitHub's `xcode-27` runner (macOS 27, free for this public repo) and refuses to publish one that lacks either slice
 2. Imports the `Developer ID Application: high5 ventures GmbH` certificate from `APPLE_CERTIFICATE_P12_BASE64`
 3. Signs the binary with Hardened Runtime
 4. Packs the `.mcpb`

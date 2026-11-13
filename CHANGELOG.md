@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+- **Releases build on GitHub's `xcode-27` runner** — the release job moved from `macrunner` to GitHub's Apple Silicon image with Xcode 27, which is free for this public repository, so a release no longer waits behind other jobs on the single self-hosted slot. A dispatched release now builds the tag it names instead of the branch it was started from.
+
 ## [1.2.0] — 2026-11-13
 
 ### Added
