@@ -26,9 +26,9 @@ jobs:
     name: Build, sign, notarize, GitHub Release
     # A tag push leaves inputs.publish_only unset, so it always builds.
     if: inputs.publish_only != true
-    # Own Apple Silicon runner: a fresh macOS VM per job, Xcode 27 only (#27).
-    # ci-lint: allow-CI006  Fork-PR-Approval: all external contributors; ephemere VM pro Job
-    runs-on: macrunner
+    # GitHub's Apple Silicon image with Xcode 27 (macOS 27): free for a public
+    # repo, and a release does not wait behind other repos' jobs on macrunner.
+    runs-on: xcode-27
     timeout-minutes: 60
     permissions:
       contents: write
@@ -36,10 +36,13 @@ jobs:
       publish: ${{ steps.version.outputs.publish }}
 
     steps:
+      # A dispatch runs this file from the branch it was started on, but builds
+      # the tag it names, exactly as a tag push does.
       # actions/checkout@v6.0.2
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
           fetch-depth: 0
 
       - name: Derive release version
