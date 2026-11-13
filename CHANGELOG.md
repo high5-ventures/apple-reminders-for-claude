@@ -4,7 +4,10 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-11-13
+
 ### Changed
+- **README, npm README and release notes point to codling**: a short section names [codling](https://codling.ai/), also from high5 ventures, for people who want Claude to work with Mail, Calendar and Notes as well. The MCP tools, their descriptions and their output are unchanged.
 - **Releases build on GitHub's `xcode-27` runner** — the release job moved from `macrunner` to GitHub's Apple Silicon image with Xcode 27, which is free for this public repository, so a release no longer waits behind other jobs on the single self-hosted slot. A dispatched release now builds the tag it names instead of the branch it was started from.
 
 ## [1.2.0] — 2026-11-13
