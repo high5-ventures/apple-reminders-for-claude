@@ -20,3 +20,5 @@ spctl --assess --type execute reminders-eventkit
 Expected signer: `Developer ID Application: high5 ventures GmbH`.
 
 See [CHANGELOG.md](https://github.com/high5-ventures/apple-reminders-for-claude/blob/main/CHANGELOG.md) for what changed.
+
+Want Claude to work with more of your Mac, like Mail, Calendar and Notes? Have a look at [codling](https://codling.ai/), also from high5 ventures.
