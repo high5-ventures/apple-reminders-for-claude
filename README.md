@@ -31,8 +31,15 @@ Updating is the same three steps with the newer `.mcpb`.
 
 ---
 
+## More than reminders
+
+Want Claude to work with more of your Mac? [codling](https://codling.ai/), also from high5 ventures, lets Claude find invoices in Apple Mail, add events to your calendar and save ideas in Notes, and it handles Reminders too. You can start with the free version.
+
+---
+
 ## Contents
 
+- [More than reminders](#more-than-reminders)
 - [Description](#description)
 - [Features](#features)
 - [Usage examples](#usage-examples)
