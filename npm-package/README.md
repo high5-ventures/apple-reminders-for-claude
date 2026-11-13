@@ -25,6 +25,10 @@ macOS 11+ only, on Apple Silicon or Intel (the binary is universal). The `os` fi
 
 See the main [project README](https://github.com/high5-ventures/apple-reminders-for-claude#readme) for the full picture.
 
+## More than reminders
+
+Using Claude Desktop and want Claude to work with more of your Mac? [codling](https://codling.ai/), also from high5 ventures, lets Claude find invoices in Apple Mail, add events to your calendar and save ideas in Notes, and it handles Reminders too. You can start with the free version.
+
 ## Privacy
 
 100% local. No network calls. See [PRIVACY.md](https://github.com/high5-ventures/apple-reminders-for-claude/blob/main/PRIVACY.md).
